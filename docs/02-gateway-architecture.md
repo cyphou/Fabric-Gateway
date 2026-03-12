@@ -18,19 +18,19 @@ The design explicitly covers **multi-cloud connectivity** — data sources hoste
 ```mermaid
 graph TB
     subgraph "On-Premises Data Center — North Europe"
-        ORA_NEU["Oracle DB<br/>(on-prem)"]
-        SQL_NEU["SQL Server<br/>(on-prem)"]
+        ORA_NEU["Oracle DB\n(on-prem)"]
+        SQL_NEU["SQL Server\n(on-prem)"]
         SAP_NEU["SAP System"]
-        FS_NEU["File Shares<br/>/ SFTP"]
+        FS_NEU["File Shares\n/ SFTP"]
     end
 
     subgraph "On-Premises Data Center — East US"
-        ORA_EUS["Oracle DB<br/>(on-prem)"]
-        SQL_EUS["SQL Server<br/>(on-prem)"]
+        ORA_EUS["Oracle DB\n(on-prem)"]
+        SQL_EUS["SQL Server\n(on-prem)"]
     end
 
     subgraph "AWS Cloud"
-        AWS_RDS["AWS RDS<br/>(PostgreSQL / MySQL)"]
+        AWS_RDS["AWS RDS\n(PostgreSQL / MySQL)"]
         AWS_RS["AWS Redshift"]
         AWS_S3["AWS S3"]
     end
@@ -43,43 +43,43 @@ graph TB
 
     subgraph "Other Cloud / SaaS"
         SNOW["Snowflake"]
-        DBKS["Databricks<br/>(non-Azure)"]
+        DBKS["Databricks\n(non-Azure)"]
     end
 
     subgraph "Azure — North Europe"
         subgraph "Gateway VMs (OPDG Clusters)"
-            GW_PROD_NEU_A["GW-PROD-NEU-ANALYTICS<br/>3-node cluster"]
-            GW_PROD_NEU_D["GW-PROD-NEU-DATAFLOW<br/>3-node cluster"]
-            GW_NP_NEU["GW-NONPROD-NEU<br/>2-node cluster"]
+            GW_PROD_NEU_A["GW-PROD-NEU-ANALYTICS\n3-node cluster"]
+            GW_PROD_NEU_D["GW-PROD-NEU-DATAFLOW\n3-node cluster"]
+            GW_NP_NEU["GW-NONPROD-NEU\n2-node cluster"]
         end
 
         subgraph "VNet Gateway"
-            VGW_NEU["VNet Data Gateway<br/>(North Europe)"]
+            VGW_NEU["VNet Data Gateway\n(North Europe)"]
         end
 
         subgraph "Azure Data Sources (VNet)"
-            PG_NEU["Azure PostgreSQL<br/>(Private Endpoint)"]
-            ASQL_NEU["Azure SQL MI<br/>(Private Endpoint)"]
+            PG_NEU["Azure PostgreSQL\n(Private Endpoint)"]
+            ASQL_NEU["Azure SQL MI\n(Private Endpoint)"]
         end
 
         subgraph "Fabric / Power BI (North Europe)"
-            FAB_NEU["Fabric Capacity<br/>F64+"]
-            PBI_NEU["Power BI Premium<br/>P1+"]
+            FAB_NEU["Fabric Capacity\nF64+"]
+            PBI_NEU["Power BI Premium\nP1+"]
         end
     end
 
     subgraph "Azure — East US"
         subgraph "Gateway VMs (OPDG Clusters) "
-            GW_PROD_EUS_A["GW-PROD-EUS-ANALYTICS<br/>2-node cluster"]
-            GW_PROD_EUS_D["GW-PROD-EUS-DATAFLOW<br/>2-node cluster"]
+            GW_PROD_EUS_A["GW-PROD-EUS-ANALYTICS\n2-node cluster"]
+            GW_PROD_EUS_D["GW-PROD-EUS-DATAFLOW\n2-node cluster"]
         end
 
         subgraph "VNet Gateway "
-            VGW_EUS["VNet Data Gateway<br/>(East US)"]
+            VGW_EUS["VNet Data Gateway\n(East US)"]
         end
 
         subgraph "Azure Data Sources (VNet) "
-            ASQL_EUS["Azure SQL<br/>(Private Endpoint)"]
+            ASQL_EUS["Azure SQL\n(Private Endpoint)"]
         end
 
         subgraph "Fabric / Power BI (East US)"
@@ -146,17 +146,17 @@ Each OPDG cluster runs as an **active-active** set of gateway nodes. The Fabric/
 ```mermaid
 graph LR
     subgraph "GW-PROD-NEU-ANALYTICS Cluster"
-        N1["Node 1<br/>gw-prod-neu-a01<br/>8 vCPU | 32 GB"]
-        N2["Node 2<br/>gw-prod-neu-a02<br/>8 vCPU | 32 GB"]
-        N3["Node 3<br/>gw-prod-neu-a03<br/>8 vCPU | 32 GB"]
+        N1["Node 1\ngw-prod-neu-a01\n8 vCPU | 32 GB"]
+        N2["Node 2\ngw-prod-neu-a02\n8 vCPU | 32 GB"]
+        N3["Node 3\ngw-prod-neu-a03\n8 vCPU | 32 GB"]
     end
 
-    SB["Azure Service Bus<br/>(Microsoft-managed)"]
-    FAB["Fabric / Power BI<br/>Service"]
+    SB["Azure Service Bus\n(Microsoft-managed)"]
+    FAB["Fabric / Power BI\nService"]
 
-    N1 <-->|HTTPS 443<br/>outbound| SB
-    N2 <-->|HTTPS 443<br/>outbound| SB
-    N3 <-->|HTTPS 443<br/>outbound| SB
+    N1 <-->|HTTPS 443\noutbound| SB
+    N2 <-->|HTTPS 443\noutbound| SB
+    N3 <-->|HTTPS 443\noutbound| SB
     SB <--> FAB
 
     classDef node fill:#4472C4,color:white
@@ -206,21 +206,21 @@ Each gateway VM runs:
 graph TB
     subgraph "Azure VNet — North Europe"
         subgraph "Subnet: snet-vnetgw-neu (/28)"
-            VGW["VNet Data Gateway<br/>(Microsoft-managed container)"]
+            VGW["VNet Data Gateway\n(Microsoft-managed container)"]
         end
         subgraph "Subnet: snet-data-neu"
-            PG["Azure PostgreSQL Flexible<br/>(Private Endpoint)"]
+            PG["Azure PostgreSQL Flexible\n(Private Endpoint)"]
             SQLMI["Azure SQL MI"]
         end
     end
 
     subgraph "Fabric Service"
-        FAB["Fabric Workspace<br/>(North Europe)"]
+        FAB["Fabric Workspace\n(North Europe)"]
     end
 
     VGW -->|Private DNS resolution| PG
     VGW -->|Private DNS resolution| SQLMI
-    VGW <-->|VNet injection<br/>(no public IP)| FAB
+    VGW <-->|VNet injection\n(no public IP)| FAB
 
     classDef managed fill:#70AD47,color:white
     class VGW managed
@@ -253,31 +253,31 @@ graph TB
 ```mermaid
 graph LR
     subgraph "On-Premises DC"
-        DS["Data Sources<br/>(Oracle, SQL, SAP, Files)"]
+        DS["Data Sources\n(Oracle, SQL, SAP, Files)"]
     end
 
     subgraph "AWS Cloud"
-        AWS_DS["AWS RDS / Redshift<br/>S3"]
+        AWS_DS["AWS RDS / Redshift\nS3"]
     end
 
     subgraph "GCP Cloud"
-        GCP_DS["BigQuery / Cloud SQL<br/>GCS"]
+        GCP_DS["BigQuery / Cloud SQL\nGCS"]
     end
 
     subgraph "Other Cloud / SaaS"
-        SAAS["Snowflake / Databricks<br/>/ Other"]
+        SAAS["Snowflake / Databricks\n/ Other"]
     end
 
     subgraph "Azure Network"
-        ER["ExpressRoute<br/>Circuit"]
-        VPN["VPN Gateway<br/>(backup + cross-cloud)"]
+        ER["ExpressRoute\nCircuit"]
+        VPN["VPN Gateway\n(backup + cross-cloud)"]
         
         subgraph "Hub VNet"
-            FW["Azure Firewall<br/>(optional)"]
+            FW["Azure Firewall\n(optional)"]
         end
         
         subgraph "Gateway VNet"
-            OPDG["OPDG VMs<br/>(Cluster Nodes)"]
+            OPDG["OPDG VMs\n(Cluster Nodes)"]
         end
         
         subgraph "Data VNet"
@@ -287,8 +287,8 @@ graph LR
     end
 
     subgraph "Microsoft Service"
-        SB["Azure Service Bus<br/>(*.servicebus.windows.net)"]
-        FAB["Fabric / Power BI<br/>(*.analysis.windows.net)"]
+        SB["Azure Service Bus\n(*.servicebus.windows.net)"]
+        FAB["Fabric / Power BI\n(*.analysis.windows.net)"]
     end
 
     DS <-->|Private / Encrypted| ER
@@ -297,9 +297,9 @@ graph LR
     VPN --> FW
     FW --> OPDG
 
-    AWS_DS <-->|S2S VPN or<br/>Partner Peering| VPN
-    GCP_DS <-->|S2S VPN or<br/>Partner Peering| VPN
-    SAAS -->|HTTPS (public<br/>with IP whitelist)| OPDG
+    AWS_DS <-->|S2S VPN or\nPartner Peering| VPN
+    GCP_DS <-->|S2S VPN or\nPartner Peering| VPN
+    SAAS -->|HTTPS (public\nwith IP whitelist)| OPDG
 
     OPDG -->|Outbound 443| SB
     SB <--> FAB
@@ -326,20 +326,20 @@ graph LR
 ```mermaid
 graph TB
     subgraph "Azure (North Europe)"
-        VPNGW["Azure VPN Gateway<br/>(or ER Circuit)"]
+        VPNGW["Azure VPN Gateway\n(or ER Circuit)"]
         GWVNET["Gateway VNet"]
         OPDG_MC["OPDG Cluster"]
     end
 
     subgraph "AWS (eu-west-1)"
-        AWSVGW["AWS Virtual<br/>Private Gateway"]
+        AWSVGW["AWS Virtual\nPrivate Gateway"]
         AWSVPC["AWS VPC"]
         RDS["RDS PostgreSQL"]
         RS["Redshift Cluster"]
     end
 
     subgraph "GCP (europe-west1)"
-        GCPVPN["GCP Cloud VPN<br/>Gateway"]
+        GCPVPN["GCP Cloud VPN\nGateway"]
         GCPVPC["GCP VPC"]
         CSQL["Cloud SQL"]
     end
@@ -444,11 +444,11 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Why Separate Clusters?"
-        A["Analytics Cluster<br/>────────────────<br/>• Short-lived queries (DQ)<br/>• Scheduled refresh (Import)<br/>• Paginated report render<br/>• Latency-sensitive"]
-        D["Dataflow Cluster<br/>────────────────<br/>• Long-running ETL<br/>• High memory usage<br/>• Large data volumes<br/>• Throughput-sensitive"]
+        A["Analytics Cluster\n────────────────\n• Short-lived queries (DQ)\n• Scheduled refresh (Import)\n• Paginated report render\n• Latency-sensitive"]
+        D["Dataflow Cluster\n────────────────\n• Long-running ETL\n• High memory usage\n• Large data volumes\n• Throughput-sensitive"]
     end
 
-    A -.-|"Prevents noisy-<br/>neighbor effect"| D
+    A -.-|"Prevents noisy-\nneighbor effect"| D
 ```
 
 ---
@@ -478,7 +478,7 @@ graph TB
         N3["GW Node 3"]
     end
 
-    SB["Azure Service Bus<br/>(Zone-redundant)"]
+    SB["Azure Service Bus\n(Zone-redundant)"]
 
     N1 --> SB
     N2 --> SB
@@ -549,14 +549,14 @@ graph LR
     end
 
     subgraph "Azure Monitor"
-        LA["Log Analytics<br/>Workspace"]
+        LA["Log Analytics\nWorkspace"]
         MET["Metrics"]
         ALR["Alert Rules"]
     end
 
     subgraph "Dashboards"
-        WB["Azure Workbook<br/>(Gateway Health)"]
-        PBI_D["Power BI Dashboard<br/>(Gateway Perf)"]
+        WB["Azure Workbook\n(Gateway Health)"]
+        PBI_D["Power BI Dashboard\n(Gateway Perf)"]
     end
 
     GW --> AMA
@@ -632,7 +632,7 @@ Subscription: sub-fabric-gateway-prod
 ```mermaid
 graph LR
     subgraph "CI/CD Pipeline"
-        REPO["Azure DevOps / GitHub<br/>IaC Repo (Bicep/Terraform)"]
+        REPO["Azure DevOps / GitHub\nIaC Repo (Bicep/Terraform)"]
         BUILD["Build & Validate"]
         TEST["Deploy to NONPROD"]
         PROD["Deploy to PROD"]
@@ -641,8 +641,8 @@ graph LR
     REPO --> BUILD --> TEST -->|Approval gate| PROD
 
     subgraph "Post-Deploy"
-        DSC["DSC / Custom Script:<br/>Install Gateway,<br/>Join Cluster"]
-        MON["Configure<br/>Monitoring"]
+        DSC["DSC / Custom Script:\nInstall Gateway,\nJoin Cluster"]
+        MON["Configure\nMonitoring"]
     end
 
     PROD --> DSC --> MON
@@ -657,15 +657,15 @@ graph LR
 ```mermaid
 graph TB
     subgraph "Entra ID"
-        SA["Service Account<br/>svc-gateway-prod@contoso.com"]
-        GA["Gateway Admin Group<br/>sg-gateway-admins"]
-        CC["Connection Creator Group<br/>sg-gateway-connectors"]
-        CU["Connection User Group<br/>sg-gateway-users"]
+        SA["Service Account\nsvc-gateway-prod@contoso.com"]
+        GA["Gateway Admin Group\nsg-gateway-admins"]
+        CC["Connection Creator Group\nsg-gateway-connectors"]
+        CU["Connection User Group\nsg-gateway-users"]
     end
 
     subgraph "Gateway"
         GW["OPDG Cluster"]
-        CONN["Data Source<br/>Connections"]
+        CONN["Data Source\nConnections"]
     end
 
     subgraph "Fabric Admin Portal"
