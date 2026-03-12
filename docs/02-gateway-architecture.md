@@ -378,6 +378,16 @@ graph TB
 | 140 | `*.powerbi.com` | 443 | HTTPS | Power BI service telemetry |
 | 150 | `*.analysis.windows.net` | 443 | HTTPS | Analysis Services protocol |
 | 160 | `*.frontend.clouddatahub.net` | 443 | HTTPS | Fabric Data Factory |
+| 170 | `graph.microsoft.com` | 443 | HTTPS | Microsoft Graph — group membership, SPN resolution, entitlements |
+| 175 | `*.login.microsoft.com` | 443 | HTTPS | Entra ID token renewal (MSAL fallback) |
+| 180 | `login.windows.net` | 443 | HTTPS | Legacy AAD token endpoint (some drivers still use it) |
+| 185 | `*.aadcdn.msftauth.net` | 443 | HTTPS | Entra ID CDN — auth libraries JS/CSS (needed for OAuth2 flows) |
+| 190 | `*.onelake.dfs.fabric.microsoft.com` | 443 | HTTPS | OneLake DFS — Shortcut read/write to Lakehouse & Warehouse files |
+| 195 | `*.blob.core.windows.net` | 443 | HTTPS | ADLS Gen2 / Blob Storage — Shortcut target (Azure storage accounts) |
+| 196 | `*.dfs.core.windows.net` | 443 | HTTPS | ADLS Gen2 DFS endpoint — Shortcut target (hierarchical namespace) |
+| 197 | `*.s3.amazonaws.com` | 443 | HTTPS | Amazon S3 — Shortcut target (cross-cloud) |
+| 198 | `storage.googleapis.com` | 443 | HTTPS | Google Cloud Storage — Shortcut target (cross-cloud) |
+| 199 | `*.dataverse.dynamics.com` | 443 | HTTPS | Dataverse — Shortcut target (Dynamics 365 / Power Platform) |
 | 200 | `*.datawarehouse.fabric.microsoft.com` | 1433 | TDS | Fabric SQL Endpoint (Lakehouse & Warehouse) |
 | 210 | `*.database.windows.net` | 1433 | TDS | Azure SQL Database (Mirroring source, direct queries) |
 | 220 | `*.pbidedicated.windows.net` | 1433 | TDS | Fabric / Power BI Premium XMLA endpoint |
@@ -390,6 +400,21 @@ graph TB
 > - **AMQP 5671-5672** — the gateway can use AMQP for higher-throughput relay communication with Azure Service Bus. If these ports are blocked, the gateway transparently falls back to HTTPS 443.
 >
 > Without port 1433 outbound, these workloads will fail with connection-timeout errors even though the gateway appears healthy on port 443.
+
+> **Identity & Entra ID endpoints**: The gateway performs identity operations beyond the initial login:
+> - **Microsoft Graph** (`graph.microsoft.com`) — resolves security-group membership for RLS, validates service-principal entitlements, and fetches user metadata for delegated OAuth2 connections.
+> - **MSAL / legacy AAD** (`*.login.microsoft.com`, `login.windows.net`, `*.aadcdn.msftauth.net`) — token acquisition, renewal, and Conditional Access evaluation. Some ODBC/OLEDB drivers still call the legacy `login.windows.net` endpoint.
+>
+> If Graph is blocked, group-based RLS and SPN-based connections will fail silently or return empty results. If MSAL endpoints are blocked, OAuth2 data-source credentials cannot be refreshed.
+
+> **OneLake Shortcuts**: Fabric Shortcuts let a Lakehouse or Warehouse reference external data as if it were local. When the gateway is involved (e.g., Shortcut through a VNet or on-prem path), it must reach the Shortcut target:
+> - **OneLake DFS** (`*.onelake.dfs.fabric.microsoft.com`) — intra-Fabric shortcuts between workspaces.
+> - **ADLS Gen2** (`*.blob.core.windows.net`, `*.dfs.core.windows.net`) — Azure storage-account shortcuts.
+> - **Amazon S3** (`*.s3.amazonaws.com`) — cross-cloud shortcuts to AWS buckets.
+> - **Google Cloud Storage** (`storage.googleapis.com`) — cross-cloud shortcuts to GCS buckets.
+> - **Dataverse** (`*.dataverse.dynamics.com`) — shortcuts to Dynamics 365 / Power Platform tables.
+>
+> Shortcuts that target private-endpoint-protected storage also require the corresponding Private DNS zone (see § 3.4).
 
 #### Outbound Rules to Data Sources (via ExpressRoute / VPN / Internet)
 
@@ -416,6 +441,10 @@ graph TB
 | `privatelink.database.windows.net` | A records for Azure SQL | VNet Gateway → Azure SQL |
 | `*.datawarehouse.fabric.microsoft.com` | CNAME / A for Fabric SQL endpoints | OPDG / VNet GW → Fabric Lakehouse & Warehouse SQL endpoint (1433) |
 | `*.pbidedicated.windows.net` | CNAME / A for XMLA endpoints | OPDG → Fabric / Power BI Premium XMLA endpoint (1433) |
+| `*.onelake.dfs.fabric.microsoft.com` | CNAME / A for OneLake DFS | OPDG / VNet GW → OneLake Shortcut read/write |
+| `privatelink.blob.core.windows.net` | A records for storage accounts | VNet GW → ADLS Gen2 Blob endpoints (Shortcuts via private endpoint) |
+| `privatelink.dfs.core.windows.net` | A records for storage accounts | VNet GW → ADLS Gen2 DFS endpoints (Shortcuts via private endpoint) |
+| `graph.microsoft.com` | CNAME / A | OPDG → Microsoft Graph (identity resolution) |
 | On-prem DNS | A records for Oracle, SQL Server hosts | OPDG → on-prem data sources |
 | AWS private hosted zone (via VPN) | A records for RDS, Redshift endpoints | OPDG → AWS data sources (forwarded via Azure DNS Private Resolver) |
 | GCP private DNS (via VPN) | A records for Cloud SQL instances | OPDG → GCP data sources (forwarded via Azure DNS Private Resolver) |
