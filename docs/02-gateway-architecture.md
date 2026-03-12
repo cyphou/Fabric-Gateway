@@ -154,13 +154,13 @@ graph LR
     SB["Azure Service Bus\n(Microsoft-managed)"]
     FAB["Fabric / Power BI\nService"]
 
-    N1 <-->|HTTPS 443\noutbound| SB
-    N2 <-->|HTTPS 443\noutbound| SB
-    N3 <-->|HTTPS 443\noutbound| SB
+    N1 <-->|HTTPS 443 outbound| SB
+    N2 <-->|HTTPS 443 outbound| SB
+    N3 <-->|HTTPS 443 outbound| SB
     SB <--> FAB
 
-    classDef node fill:#4472C4,color:white
-    class N1,N2,N3 node
+    classDef gwnode fill:#4472C4,color:white
+    class N1,N2,N3 gwnode
 ```
 
 **Key design decisions**:
@@ -220,7 +220,7 @@ graph TB
 
     VGW -->|Private DNS resolution| PG
     VGW -->|Private DNS resolution| SQLMI
-    VGW <-->|VNet injection\n(no public IP)| FAB
+    VGW <-->|VNet injection| FAB
 
     classDef managed fill:#70AD47,color:white
     class VGW managed
@@ -297,9 +297,9 @@ graph LR
     VPN --> FW
     FW --> OPDG
 
-    AWS_DS <-->|S2S VPN or\nPartner Peering| VPN
-    GCP_DS <-->|S2S VPN or\nPartner Peering| VPN
-    SAAS -->|HTTPS (public\nwith IP whitelist)| OPDG
+    AWS_DS <-->|S2S VPN / Partner Peering| VPN
+    GCP_DS <-->|S2S VPN / Partner Peering| VPN
+    SAAS -->|HTTPS with IP whitelist| OPDG
 
     OPDG -->|Outbound 443| SB
     SB <--> FAB
@@ -448,7 +448,7 @@ graph TB
         D["Dataflow Cluster\n────────────────\n• Long-running ETL\n• High memory usage\n• Large data volumes\n• Throughput-sensitive"]
     end
 
-    A -.-|"Prevents noisy-\nneighbor effect"| D
+    A -.-|Prevents noisy-neighbor effect| D
 ```
 
 ---
