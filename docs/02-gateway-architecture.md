@@ -378,6 +378,18 @@ graph TB
 | 140 | `*.powerbi.com` | 443 | HTTPS | Power BI service telemetry |
 | 150 | `*.analysis.windows.net` | 443 | HTTPS | Analysis Services protocol |
 | 160 | `*.frontend.clouddatahub.net` | 443 | HTTPS | Fabric Data Factory |
+| 200 | `*.datawarehouse.fabric.microsoft.com` | 1433 | TDS | Fabric SQL Endpoint (Lakehouse & Warehouse) |
+| 210 | `*.database.windows.net` | 1433 | TDS | Azure SQL Database (Mirroring source, direct queries) |
+| 220 | `*.pbidedicated.windows.net` | 1433 | TDS | Fabric / Power BI Premium XMLA endpoint |
+| 300 | `*.servicebus.windows.net` | 5671-5672 | AMQP | Service Bus optimised transport (falls back to 443) |
+
+> **Port 1433 for Fabric workloads**: Several Fabric capabilities communicate over TDS (port 1433) rather than HTTPS:
+> - **Fabric Lakehouse / Warehouse SQL Endpoint** — Power BI DirectQuery and Import against the SQL analytics endpoint use TDS on 1433 (`*.datawarehouse.fabric.microsoft.com`).
+> - **Fabric Mirroring** — when mirroring Azure SQL Database into Fabric, the gateway reads change-feed data over TDS on 1433 (`*.database.windows.net`).
+> - **XMLA Endpoint** — external tools (Tabular Editor, DAX Studio) connecting through the gateway use TDS on 1433 (`*.pbidedicated.windows.net`).
+> - **AMQP 5671-5672** — the gateway can use AMQP for higher-throughput relay communication with Azure Service Bus. If these ports are blocked, the gateway transparently falls back to HTTPS 443.
+>
+> Without port 1433 outbound, these workloads will fail with connection-timeout errors even though the gateway appears healthy on port 443.
 
 #### Outbound Rules to Data Sources (via ExpressRoute / VPN / Internet)
 
@@ -402,6 +414,8 @@ graph TB
 |---|---|---|
 | `privatelink.postgres.database.azure.com` | A records for Azure PG instances | VNet Gateway → Azure PostgreSQL |
 | `privatelink.database.windows.net` | A records for Azure SQL | VNet Gateway → Azure SQL |
+| `*.datawarehouse.fabric.microsoft.com` | CNAME / A for Fabric SQL endpoints | OPDG / VNet GW → Fabric Lakehouse & Warehouse SQL endpoint (1433) |
+| `*.pbidedicated.windows.net` | CNAME / A for XMLA endpoints | OPDG → Fabric / Power BI Premium XMLA endpoint (1433) |
 | On-prem DNS | A records for Oracle, SQL Server hosts | OPDG → on-prem data sources |
 | AWS private hosted zone (via VPN) | A records for RDS, Redshift endpoints | OPDG → AWS data sources (forwarded via Azure DNS Private Resolver) |
 | GCP private DNS (via VPN) | A records for Cloud SQL instances | OPDG → GCP data sources (forwarded via Azure DNS Private Resolver) |

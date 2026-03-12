@@ -24,7 +24,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 | **Use when** | Data source is on-premises, on IaaS VMs without VNet integration, **or hosted on non-Azure clouds (AWS, GCP, etc.)** |
 | **Supports** | All six workload types listed in scope |
 | **Clustering** | Yes — up to 10 nodes per cluster for HA and load distribution |
-| **Network** | Outbound HTTPS (port 443) to Azure Service Bus; no inbound ports |
+| **Network** | Outbound HTTPS 443 to Azure Service Bus + TDS 1433 for Fabric SQL/Mirroring/XMLA endpoints; optional AMQP 5671-5672; no inbound ports |
 | **Install** | Windows Server (physical or VM); requires .NET Framework 4.8+ |
 | **Best for** | Oracle on-prem, SQL Server on-prem, SAP systems, file shares, **AWS RDS/Redshift, GCP Cloud SQL/BigQuery, any non-Azure cloud DB** |
 
