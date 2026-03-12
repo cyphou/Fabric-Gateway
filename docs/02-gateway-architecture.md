@@ -314,6 +314,9 @@ graph LR
 |---|---|---|---|---|
 | **AWS (VPC-hosted)** | Azure VPN GW ↔ AWS VGW (S2S VPN) | IPsec tunnels between Azure VNet and AWS VPC | 10-30 ms (same geo) | Encrypted tunnel; no public exposure |
 | **AWS (VPC-hosted)** | ExpressRoute + Megaport/Equinix ↔ AWS Direct Connect | Private peering through colocation provider | 3-10 ms | Private circuit; highest bandwidth |
+
+> For a comprehensive deep-dive on AWS S3, Redshift, and Databricks connectivity (identity models, IAM policies, ODBC config, sequence diagrams), see **[03-aws-connectivity.md](./03-aws-connectivity.md)**.
+
 | **GCP (VPC-hosted)** | Azure VPN GW ↔ GCP Cloud VPN (S2S VPN) | IPsec tunnels between Azure VNet and GCP VPC | 10-30 ms (same geo) | Encrypted tunnel; no public exposure |
 | **GCP (VPC-hosted)** | ExpressRoute + Partner ↔ GCP Cloud Interconnect | Private peering through colocation provider | 3-10 ms | Private circuit; highest bandwidth |
 | **GCP BigQuery** | Public HTTPS API | BigQuery is API-only; no VPC peering needed | Variable | TLS 1.2+; OAuth 2.0; IP whitelist |

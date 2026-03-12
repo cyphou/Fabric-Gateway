@@ -71,6 +71,7 @@ This repository contains the **strategy** and **technical architecture** for dep
 |---|---|
 | [Strategy](docs/01-gateway-strategy.md) | Gateway type selection, governance framework, naming conventions, capacity planning, risk register, success metrics |
 | [Architecture](docs/02-gateway-architecture.md) | Technical design — cluster topology, VM specs, network architecture, multi-cloud connectivity, firewall rules, workload routing, HA/DR, monitoring, security, IaC deployment |
+| [AWS Connectivity](docs/03-aws-connectivity.md) | Deep dive — all network & identity paths from Fabric to AWS S3, Redshift, and Databricks on AWS; IAM policies, ODBC config, sequence diagrams, security hardening |
 
 ## Gateway Type Decision Tree
 
