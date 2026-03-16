@@ -11,7 +11,7 @@
 
 The architecture deploys a **hub-and-spoke gateway model** where each Azure region hosts a self-contained gateway tier, aligned to the Fabric capacity in that region. Gateways are separated by **workload type** (analytics vs. data integration) and **environment** (production vs. non-production).
 
-The design explicitly covers **multi-cloud connectivity** — data sources hosted on AWS, GCP, or other providers connect through OPDG clusters in Azure via Site-to-Site VPN, ExpressRoute partner peering, or secure public endpoints.
+The design explicitly covers **multi-cloud connectivity** — data sources hosted on AWS, GCP, or other providers connect either through **native cloud connectors** from Fabric / Power BI or through **OPDG clusters in Azure** via Site-to-Site VPN, ExpressRoute partner peering, or secure public endpoints when private or driver-based access is required.
 
 ### 1.1 High-Level Architecture Diagram
 
@@ -33,6 +33,7 @@ graph TB
         AWS_RDS["AWS RDS\n(PostgreSQL / MySQL)"]
         AWS_RS["AWS Redshift"]
         AWS_S3["AWS S3"]
+        AWS_SM["AWS SageMaker\nUnified Studio"]
     end
 
     subgraph "GCP Cloud"
@@ -99,8 +100,9 @@ graph TB
 
     %% AWS to Gateway connections
     AWS_RDS -->|S2S VPN / Partner Peering| GW_PROD_NEU_A
-    AWS_RS -->|S2S VPN / Partner Peering| GW_PROD_EUS_D
-    AWS_S3 -->|HTTPS public endpoint| GW_PROD_NEU_D
+    AWS_RS -->|S2S VPN / Partner Peering\n(private) or HTTPS direct\n(public cloud connector)| GW_PROD_EUS_D
+    AWS_S3 -->|HTTPS public endpoint\nor direct shortcut| GW_PROD_NEU_D
+    AWS_SM -->|Athena ODBC via OPDG\nor S3 direct access| GW_PROD_EUS_D
 
     %% GCP to Gateway connections
     GCP_BQ -->|HTTPS public API| GW_PROD_NEU_A
@@ -115,6 +117,11 @@ graph TB
     PG_NEU --> VGW_NEU
     ASQL_NEU --> VGW_NEU
     ASQL_EUS --> VGW_EUS
+
+    %% Direct cloud connector paths
+    AWS_RS -.->|Public cloud connector| FAB_EUS
+    DBKS -.->|Public cloud connector| FAB_EUS
+    AWS_S3 -.->|Shortcut / connector| FAB_NEU
 
     %% Gateway to Fabric
     GW_PROD_NEU_A -->|HTTPS 443| FAB_NEU
@@ -191,10 +198,11 @@ Each gateway VM runs:
 | Oracle Client | Oracle Instant Client 21c (for Oracle connectivity) |
 | PostgreSQL ODBC/OLE DB | npgsql or PostgreSQL ODBC driver |
 | SAP .NET Connector | SAP NCo 3.1 (for SAP RFC/BAPI) |
-| Amazon Redshift ODBC | Latest (for AWS Redshift connectivity) |
+| Amazon Redshift ODBC | Latest (for private Redshift connectivity via OPDG) |
+| Amazon Athena ODBC | Latest (for SageMaker Unified Studio / Athena connectivity) |
 | Simba BigQuery ODBC | Latest (for GCP BigQuery connectivity) |
 | Snowflake ODBC | Latest (for Snowflake connectivity) |
-| Databricks ODBC/Spark | Latest (for Databricks connectivity) |
+| Databricks ODBC/Spark | Latest (for private Databricks connectivity via OPDG) |
 | MySQL ODBC (Connector/ODBC) | 8.x (for AWS RDS MySQL, GCP Cloud SQL MySQL) |
 | Azure Monitor Agent | For VM-level metrics and logs |
 

@@ -13,8 +13,8 @@
 - [x] Strategy document (`docs/01-gateway-strategy.md`)
 - [x] Architecture design document (`docs/02-gateway-architecture.md`)
 - [x] Architecture diagrams (Mermaid — embedded in architecture doc)
-- [ ] Review section
+- [x] Review section
 
 ## Status
 - **Started**: 2026-03-12
-- **Last Updated**: 2026-03-12
+- **Last Updated**: 2026-03-16

@@ -1,6 +1,6 @@
 # Data Gateway Architecture for Microsoft Fabric & Power BI
 
-Enterprise-grade, multi-cloud gateway architecture for connecting on-premises, Azure, AWS, GCP, and SaaS data sources to Microsoft Fabric and Power BI.
+Enterprise-grade, multi-cloud connectivity architecture for connecting on-premises, Azure, AWS, GCP, and SaaS data sources to Microsoft Fabric and Power BI.
 
 ---
 
@@ -9,7 +9,7 @@ Enterprise-grade, multi-cloud gateway architecture for connecting on-premises, A
 ```mermaid
 graph LR
     OnPrem["On-Premises\nOracle, SQL Server\nSAP, Files"]
-    AWS["AWS\nRDS, Redshift, S3"]
+    AWS["AWS\nRDS, Redshift, S3,\nSageMaker Unified Studio"]
     GCP["GCP\nBigQuery, Cloud SQL, GCS"]
     SaaS["SaaS\nSnowflake, Databricks"]
     AzureDS["Azure Data Sources\nPostgreSQL, SQL MI"]
@@ -20,7 +20,7 @@ graph LR
     Fabric["Microsoft Fabric\n& Power BI"]
 
     OnPrem -->|ExpressRoute| OPDG
-    AWS -->|S2S VPN| OPDG
+    AWS -->|S2S VPN / HTTPS / Native cloud connectors| OPDG
     GCP -->|S2S VPN / HTTPS| OPDG
     SaaS -->|HTTPS| OPDG
     AzureDS --> VNetGW
@@ -29,13 +29,13 @@ graph LR
     VNetGW -->|VNet injection| Fabric
 ```
 
-This repository contains the **strategy** and **technical architecture** for deploying On-premises Data Gateways (OPDG) and VNet Data Gateways across a multi-region, centrally-managed environment.
+This repository contains the **strategy** and **technical architecture** for deploying On-premises Data Gateways (OPDG) and VNet Data Gateways across a multi-region, centrally-managed environment, plus connector-specific guidance for when Fabric or Power BI can connect directly without a gateway.
 
 ## Key Design Decisions
 
 | Decision | Rationale |
 |---|---|
-| **OPDG for on-prem + multi-cloud** | Only gateway type that supports non-Azure sources (AWS, GCP, Snowflake, etc.) |
+| **OPDG for private or driver-based sources** | Required for on-prem sources and private/non-Azure sources that don't support native cloud connectivity |
 | **VNet Data Gateway for Azure PaaS** | Zero VM management; auto-scaling; included in Fabric/Premium cost |
 | **Separate Analytics vs. Dataflow clusters** | Prevents noisy-neighbor effects between interactive queries and long-running ETL |
 | **3-node HA clusters across Availability Zones** | Automatic failover; stateless nodes; < 1 min RTO |
@@ -53,7 +53,7 @@ This repository contains the **strategy** and **technical architecture** for dep
 |---|---|
 | On-premises | Oracle, SQL Server, SAP, File Shares |
 | Azure | PostgreSQL (Flexible Server), SQL Managed Instance |
-| AWS | RDS (PostgreSQL/MySQL), Redshift, S3 |
+| AWS | RDS (PostgreSQL/MySQL), Redshift, S3, SageMaker Unified Studio |
 | GCP | BigQuery, Cloud SQL, Cloud Storage |
 | SaaS | Snowflake, Databricks |
 
@@ -71,7 +71,7 @@ This repository contains the **strategy** and **technical architecture** for dep
 |---|---|
 | [Strategy](docs/01-gateway-strategy.md) | Gateway type selection, governance framework, naming conventions, capacity planning, risk register, success metrics |
 | [Architecture](docs/02-gateway-architecture.md) | Technical design — cluster topology, VM specs, network architecture, multi-cloud connectivity, firewall rules, workload routing, HA/DR, monitoring, security, IaC deployment |
-| [AWS Connectivity](docs/03-aws-connectivity.md) | Deep dive — all network & identity paths from Fabric to AWS S3, Redshift, and Databricks on AWS; IAM policies, ODBC config, sequence diagrams, security hardening |
+| [AWS Connectivity](docs/03-aws-connectivity.md) | Deep dive — all network & identity paths from Fabric to AWS S3, Redshift, Databricks on AWS, and SageMaker Unified Studio; native cloud vs gateway paths, IAM policies, ODBC config, sequence diagrams, security hardening |
 
 ## Gateway Type Decision Tree
 
@@ -80,8 +80,9 @@ Where is the data source?
 ├── Azure VNet ──────────► VNet Data Gateway (if workload supports it)
 │   └── Paginated Reports / Dataflows Gen1? ──► OPDG Standard
 ├── On-Premises ─────────► OPDG Standard (via ExpressRoute)
-└── Other Cloud / SaaS ──► OPDG Standard (via VPN or HTTPS)
-    (AWS, GCP, Snowflake, Databricks, etc.)
+└── Other Cloud / SaaS
+  ├── Native cloud connector or Shortcut supported? ──► Direct cloud connection
+  └── Private endpoint / driver-based access? ───────► OPDG Standard
 ```
 
 ## Architecture Highlights
@@ -99,10 +100,10 @@ Examples:
 ### Multi-Cloud Connectivity
 | Source Cloud | Method | Use When |
 |---|---|---|
-| AWS (VPC resources) | Site-to-Site VPN or ExpressRoute + Direct Connect | RDS, Redshift in private VPC |
+| AWS (VPC resources) | Site-to-Site VPN or ExpressRoute + Direct Connect | RDS, Redshift in private VPC, private Databricks, Athena via OPDG |
 | GCP (VPC resources) | Site-to-Site VPN or ExpressRoute + Cloud Interconnect | Cloud SQL in private VPC |
+| S3 / Redshift / Databricks | Public HTTPS native connector | Public endpoints with supported cloud connectivity |
 | BigQuery / Snowflake | Public HTTPS API | API-based services |
-| Databricks | Public HTTPS or S2S VPN | Depends on deployment model |
 
 ### Availability Targets
 | KPI | Target |

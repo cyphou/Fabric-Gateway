@@ -11,7 +11,7 @@
 
 This document defines the strategic approach for deploying, managing, and governing On-premises Data Gateways (OPDG) and VNet Data Gateways for Microsoft Fabric and Power BI across a multi-region, centrally-managed enterprise environment.
 
-The strategy addresses **six workload categories**: Power BI Semantic Models (Import & DirectQuery), Power BI Dataflows Gen1/Gen2, Fabric Data Pipelines (Data Factory), Fabric Dataflows Gen2, Fabric Mirroring, and Paginated Reports — connected to a diverse **multi-cloud and hybrid source landscape** including Oracle, PostgreSQL, SQL Server, SAP, file-based systems, and data sources hosted on **AWS** (RDS, Redshift, S3), **GCP** (BigQuery, Cloud SQL, GCS), and **other cloud providers**.
+The strategy addresses **six workload categories**: Power BI Semantic Models (Import & DirectQuery), Power BI Dataflows Gen1/Gen2, Fabric Data Pipelines (Data Factory), Fabric Dataflows Gen2, Fabric Mirroring, and Paginated Reports — connected to a diverse **multi-cloud and hybrid source landscape** including Oracle, PostgreSQL, SQL Server, SAP, file-based systems, and data sources hosted on **AWS** (RDS, Redshift, S3, SageMaker Unified Studio), **GCP** (BigQuery, Cloud SQL, GCS), and **other cloud providers**.
 
 ---
 
@@ -21,12 +21,12 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 
 | Attribute | Detail |
 |---|---|
-| **Use when** | Data source is on-premises, on IaaS VMs without VNet integration, **or hosted on non-Azure clouds (AWS, GCP, etc.)** |
+| **Use when** | Data source is on-premises, on IaaS VMs without VNet integration, or hosted on non-Azure clouds **that require private connectivity, drivers, or a gateway-supported runtime** |
 | **Supports** | All six workload types listed in scope |
 | **Clustering** | Yes — up to 10 nodes per cluster for HA and load distribution |
 | **Network** | Outbound HTTPS 443 (Service Bus, Entra ID, Graph, OneLake, Shortcut targets) + TDS 1433 (Fabric SQL/Mirroring/XMLA) + optional AMQP 5671-5672; no inbound ports |
 | **Install** | Windows Server (physical or VM); requires .NET Framework 4.8+ |
-| **Best for** | Oracle on-prem, SQL Server on-prem, SAP systems, file shares, **AWS RDS/Redshift, GCP Cloud SQL/BigQuery, any non-Azure cloud DB** |
+| **Best for** | Oracle on-prem, SQL Server on-prem, SAP systems, file shares, **AWS RDS, Athena/ODBC, Redshift in private VPC, private Databricks, GCP Cloud SQL/BigQuery, any non-Azure cloud DB that lacks native cloud connectivity** |
 
 ### 2.2 On-premises Data Gateway (Personal Mode)
 
@@ -75,7 +75,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
    VNet sources)
 ```
 
-> **Multi-cloud rule**: VNet Data Gateway **only** works with data sources inside an Azure VNet. For any source on AWS, GCP, or other cloud providers, the **On-premises Data Gateway (Standard)** is the only option.
+> **Multi-cloud rule**: VNet Data Gateway **only** works with data sources inside an Azure VNet. For sources on AWS, GCP, or other cloud providers, use either a **native cloud connector** when supported or **On-premises Data Gateway (Standard)** when the source is private, driver-based, or otherwise requires gateway mediation.
 
 ---
 
@@ -119,12 +119,14 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 
 ### 3.6 OPDG as the Multi-Cloud Bridge
 
-- **Non-Azure cloud sources always require OPDG** — VNet Data Gateway has no cross-cloud capability
+- **VNet Data Gateway has no cross-cloud capability**
+- **Some non-Azure cloud sources can connect directly** from Fabric / Power BI without OPDG when Microsoft provides a native cloud connector (for example, public Amazon Redshift or public Databricks SQL Warehouse)
+- **Use OPDG when the non-Azure source is private, uses a VPC endpoint / Private Link, or depends on an installed driver / DSN**
 - Place OPDG gateway VMs in Azure (closest region to the Fabric capacity), not inside the other cloud
 - Connect to external cloud sources via:
   - **Site-to-Site VPN** (Azure VPN Gateway ↔ AWS VGW / GCP Cloud VPN) — preferred for security
   - **ExpressRoute + partner peering** (e.g., Megaport, Equinix) to AWS Direct Connect or GCP Interconnect — preferred for bandwidth/latency
-  - **Public internet with TLS** — acceptable for SaaS-like endpoints (e.g., BigQuery API, Snowflake, Databricks) with IP whitelisting
+     - **Public internet with TLS** — acceptable for SaaS-like or native cloud connector endpoints (e.g., BigQuery API, Snowflake, public Databricks, public Redshift) with IP whitelisting
 - Install appropriate **ODBC/JDBC drivers** on gateway VMs for each cloud data source (e.g., Simba driver for BigQuery, Amazon Redshift ODBC)
 - Treat multi-cloud connections with the **same credential rotation and monitoring** as on-prem sources
 
@@ -137,7 +139,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 | Region | Role | Gateway Types | Data Sources |
 |---|---|---|---|
 | **North Europe** | Primary | OPDG Clusters + VNet GW | Oracle on-prem, SQL Server on-prem, SAP, Azure PG, File Shares, **AWS RDS (eu-west-1), GCP BigQuery (europe-west1)** |
-| **East US** | Secondary | OPDG Clusters + VNet GW | Oracle on-prem (US DC), SQL Server, Azure SQL, **AWS Redshift (us-east-1), Snowflake, Databricks** |
+| **East US** | Secondary | OPDG Clusters + VNet GW | Oracle on-prem (US DC), SQL Server, Azure SQL, **AWS Redshift (us-east-1), Databricks, SageMaker Unified Studio, Snowflake** |
 | **France Central** | Future | OPDG Cluster + VNet GW | TBD — planned for DR or localized compliance |
 
 > **Multi-cloud region affinity**: Place the OPDG cluster in the Azure region closest to both the Fabric capacity **and** the external cloud region hosting the data source. For example, AWS `eu-west-1` (Ireland) maps naturally to Azure North Europe.
