@@ -38,7 +38,7 @@
 | Azure Databricks | Yes | VNet Data Gateway or OPDG when workspace storage is private | Yes |
 | Azure Data Explorer | Yes | VNet Data Gateway | Yes |
 | Azure Cosmos DB | Yes, for connector and mirroring setup | Native Fabric mirroring or direct connector; private network bypass for mirroring | Limited fallback, but mirroring is preferred |
-| Azure Event Hubs / IoT / Service Bus streaming | Not through classic Power Query connectors | Fabric Eventstream with Private Link when needed | No classic gateway by default |
+| Azure Event Hubs / IoT / Service Bus streaming | Not through classic Power Query connectors | Fabric Eventstream with Streaming virtual network data gateway or Private Link when needed | No classic gateway by default |
 
 > [!TIP]
 > Azure is where **VNet Data Gateway** should do most of the private-network heavy lifting. Use **OPDG** only when the workload is not supported by VNet Data Gateway or when you intentionally standardize on gateway-hosted runtime.
@@ -55,7 +55,7 @@ The practical rules are:
 
 This same VNet GW model can also be extended to **supported non-Azure connectors** when those sources are routed into Azure networking, but Azure remains the place where VNet GW is the strongest default.
 
-That makes Azure the least infrastructure-heavy cloud in this repository, but it still has important exceptions around storage firewalls, service principal behavior through gateways, Azure Databricks private storage access, Azure SQL Managed Instance network design, and Azure streaming scenarios where the current Microsoft direction is **Fabric Real-Time Intelligence with Private Link**, not legacy Power BI streaming outputs.
+That makes Azure the least infrastructure-heavy cloud in this repository, but it still has important exceptions around storage firewalls, service principal behavior through gateways, Azure Databricks private storage access, Azure SQL Managed Instance network design, and Azure streaming scenarios where the current Microsoft direction is **Fabric Real-Time Intelligence** with **Eventstream**, **Streaming virtual network data gateway** in preview, and **Private Link** support for selected scenarios, not legacy Power BI streaming outputs.
 
 ## 1. Connectivity Summary Matrix
 
@@ -82,7 +82,7 @@ That makes Azure the least infrastructure-heavy cloud in this repository, but it
 | **Azure Data Explorer** | Dataflow Gen2 | Azure Data Explorer connector | No for public cluster; VNet GW for private route | HTTPS to Kusto cluster | Organizational account |
 | **Azure Cosmos DB** | Semantic Model (Import / DirectQuery) | Azure Cosmos DB v2 connector | Not required for public endpoint, but not preferred for new projects | HTTPS to Cosmos endpoint | Feed key or Organizational account |
 | **Azure Cosmos DB** | Fabric analytics landing zone | Fabric Mirroring for Azure Cosmos DB | No gateway; use network ACL bypass for private account | Fabric-managed near real-time replication into OneLake | Entra ID with RBAC or account keys |
-| **Azure Event Hubs / IoT Hub / Service Bus** | Real-time ingestion | Fabric Eventstream source connector | No classic gateway; use Workspace Private Link for supported private inbound scenarios | Eventstream ingress path into Fabric | Source-specific secrets, connection strings, or Entra ID depending on connector |
+| **Azure Event Hubs / IoT Hub / Service Bus** | Real-time ingestion | Fabric Eventstream source connector | No classic gateway; use Streaming virtual network data gateway for private source reachability or Workspace Private Link for supported private inbound scenarios | Eventstream ingress path into Fabric | Source-specific secrets, connection strings, or Entra ID depending on connector |
 | **Azure Stream Analytics** | Real-time Power BI output | Legacy Power BI streaming output | No gateway, but deprecated direction | REST push into Power BI streaming semantic model | Power BI authorization or managed identity |
 
 ### 1.1 Where VNet Data Gateway Fits in Azure
@@ -100,7 +100,7 @@ For Azure, VNet Data Gateway is the primary private-network option and should be
 
 For **Azure Cosmos DB**, prefer **Fabric mirroring** before considering the legacy Power Query connector.
 
-For **Azure streaming**, treat **Fabric Eventstream plus Real-Time hub and Private Link** as a separate pattern rather than as another OPDG or VNet GW workload.
+For **Azure streaming**, treat **Fabric Eventstream plus Real-Time hub**, the **Streaming virtual network data gateway** preview, and **Private Link** as a separate pattern rather than as another OPDG or VNet GW workload.
 
 OPDG remains a fallback, not the default.
 
@@ -187,7 +187,7 @@ graph TB
 | **Direct cloud path** | Public Azure SQL, Synapse SQL, public Azure PostgreSQL, standard storage access | Lowest complexity |
 | **VNet Data Gateway** | Private endpoints and Azure-native private connectivity | Best-aligned Azure design |
 | **Fabric-native replication** | Azure Cosmos DB analytical landing into OneLake | Best analytical pattern for near real-time HTAP-style reporting |
-| **Real-Time Intelligence path** | Event-driven ingestion from Azure streams and CDC sources | Modern streaming pattern that avoids legacy Power BI streaming constraints |
+| **Real-Time Intelligence path** | Event-driven ingestion from Azure streams and CDC sources | Modern streaming pattern that uses Eventstream, preview streaming gateway options, and avoids legacy Power BI streaming constraints |
 | **OPDG fallback** | Unsupported VNet GW workloads or explicit gateway runtime standardization | Keeps a single escape hatch for edge cases |
 
 ---
@@ -404,6 +404,7 @@ graph LR
     IOT["Azure IoT Hub"] --> ES
     SB["Azure Service Bus"] --> ES
     CDC["Azure SQL / Cosmos CDC"] --> ES
+    SVGW["Streaming virtual network data gateway"] -.-> ES
     ES --> HUB["Real-Time Hub"]
     ES --> EHOUSE["Eventhouse or Lakehouse"]
     ES --> PBI["Real-Time Dashboards or Power BI"]
@@ -413,15 +414,18 @@ graph LR
 #### Key points
 
 - The current Microsoft direction for streaming is **Fabric Real-Time Intelligence**, especially **Eventstream**, **Real-Time hub**, and downstream **Eventhouse**, **Lakehouse**, or **Activator** patterns.
-- This is not a third classic gateway like **OPDG** or **VNet Data Gateway**. It is better documented as a **streaming ingestion architecture**.
+- Microsoft now documents a preview construct named **Streaming virtual network data gateway**. It supplies a bridge Azure virtual network to the Eventstream connector service so connectors can be injected into that network and reach private sources.
+- This is still not the same thing as the classic **OPDG** or **VNet Data Gateway** used for Power Query-style connectivity. It is better documented as a **streaming ingestion architecture** with its own gateway concept.
 - Eventstream supports Azure-native streaming inputs such as **Azure Event Hubs**, **Azure IoT Hub**, **Azure Service Bus**, **Azure Data Explorer**, **Azure SQL CDC**, **Azure Cosmos DB CDC**, and others.
+- The preview prerequisites include an Azure subscription in the same tenant, a bridge VNet and delegated subnet for **Microsoft.MessagingConnectors**, and connectivity from that bridge VNet to the source private network via **VPN**, **ExpressRoute**, **private endpoints**, or **network peering**.
 - For private inbound streaming, Microsoft now supports **Tenant Private Link** and **Workspace Private Link** for selected Eventstream scenarios.
 - Legacy **Power BI real-time streaming** and **Azure Stream Analytics output to Power BI** remain available for now, but Microsoft recommends migrating to **Fabric Real-Time Intelligence**, and creation of new Power BI streaming models is scheduled to stop after **2027-10-31**.
 
 #### Recommendation
 
 - New streaming design: use **Fabric Eventstream** and **Real-Time hub**.
-- Need private inbound connectivity for supported sources: use **Workspace Private Link** rather than treating streaming as an OPDG use case.
+- Need connector reach into private Azure, third-party cloud, or on-prem streaming sources: use the preview **Streaming virtual network data gateway**.
+- Need private inbound connectivity for supported Eventstream scenarios: use **Workspace Private Link** rather than treating streaming as an OPDG use case.
 - Keep legacy Power BI streaming only for existing solutions that you are not ready to migrate yet.
 
 ---
@@ -512,7 +516,7 @@ sequenceDiagram
 - Enable **trusted workspace access** for ADLS instead of broad firewall exceptions when supported.
 - For **Azure Databricks**, validate both the SQL warehouse path and the backing storage access path.
 - For **Azure Cosmos DB**, prefer **Entra ID plus RBAC** for mirroring and enable only the minimum required network bypass settings.
-- For **Azure streaming**, prefer **Private Link-enabled Eventstream** over legacy Power BI streaming endpoints where private access matters.
+- For **Azure streaming**, prefer **Eventstream** with **Streaming virtual network data gateway** or **Private Link-enabled Eventstream** over legacy Power BI streaming endpoints where private access matters.
 
 ---
 
@@ -531,6 +535,7 @@ sequenceDiagram
 | Azure Data Explorer DirectQuery query is brittle | Complex KQL embedded in Power Query | Move logic into Kusto functions |
 | Azure Cosmos DB analytics design is slow or schema-fragile | Legacy v2 connector used for evolving or nested JSON workloads | Prefer Fabric mirroring |
 | Streaming architecture still targets Power BI streaming semantic models | Legacy pattern approaching retirement | Migrate to Eventstream and Real-Time Intelligence |
+| Private streaming source cannot be reached from Eventstream | No bridge VNet injected into connector runtime | Configure the preview Streaming virtual network data gateway and validate network path from the bridge VNet |
 
 ---
 
@@ -565,3 +570,9 @@ sequenceDiagram
 **Decision**: Treat Azure streaming as a Real-Time Intelligence architecture pattern built on Eventstream, Real-Time hub, Eventhouse, and Private Link where supported.  
 **Why**: Microsoft is deprecating new Power BI real-time streaming model creation and recommends Fabric Real-Time Intelligence as the target architecture.  
 **Consequence**: Streaming is documented separately from OPDG and VNet GW instead of being forced into the classic gateway model.
+
+### ADR-06 — Use the Streaming virtual network data gateway for private Eventstream connector reachability
+
+**Decision**: For private streaming sources that must be ingested through Eventstream connectors, prefer the preview **Streaming virtual network data gateway** pattern over trying to reuse OPDG or the classic VNet Data Gateway.  
+**Why**: Microsoft’s March 2026 Fabric guidance introduces this feature specifically to bridge private source networks to Eventstream connector runtimes via Azure VNet injection.  
+**Consequence**: Azure streaming guidance now distinguishes between classic query/refresh gateways and the dedicated streaming gateway model.
