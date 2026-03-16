@@ -3,7 +3,7 @@
 > **Version**: 1.0  
 > **Date**: 2026-03-12  
 > **Companion to**: [01-gateway-strategy.md](./01-gateway-strategy.md) | [02-gateway-architecture.md](./02-gateway-architecture.md)  
-> **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **AWS S3**, **AWS Databricks (Databricks on AWS)**, and **AWS Redshift** — covering network topology, identity / authentication models, and Fabric connector mapping.  
+> **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **AWS S3**, **AWS Databricks (Databricks on AWS)**, **AWS Redshift**, and **AWS SageMaker Unified Studio** — covering network topology, identity / authentication models, and Fabric connector mapping.  
 
 ---
 
@@ -15,17 +15,21 @@
 | **S3** | Fabric Pipeline (Copy Activity) | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key (stored in Fabric connection) |
 | **S3** | Dataflow Gen2 | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key |
 | **S3** | Notebook (Spark) | `boto3` / `s3a://` protocol | No | Public HTTPS | IAM Access Key or STS Assume-Role (env vars / Fabric secret) |
-| **Redshift** | Semantic Model (Import) | Amazon Redshift connector | OPDG | S2S VPN or Public + TLS | Redshift DB credentials (user/password) |
-| **Redshift** | Semantic Model (DirectQuery) | Amazon Redshift connector | OPDG | S2S VPN or Public + TLS | Redshift DB credentials |
-| **Redshift** | Dataflow Gen2 | Amazon Redshift connector | OPDG | S2S VPN or Public + TLS | Redshift DB credentials |
-| **Redshift** | Fabric Pipeline (Copy Activity) | Amazon Redshift connector | OPDG (private) / No (public) | S2S VPN or Public + TLS | Redshift DB credentials |
+| **Redshift** | Semantic Model (Import) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
+| **Redshift** | Semantic Model (DirectQuery) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
+| **Redshift** | Dataflow Gen2 | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account |
+| **Redshift** | Fabric Pipeline (Copy Activity) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials |
 | **Redshift** | Notebook (Spark) | `redshift-connector` / JDBC | No | Public + TLS | Redshift DB credentials or IAM-based auth |
-| **Redshift Serverless** | Same as above | Same connectors | Same rules | Public + TLS (RA3 public endpoint) or S2S VPN | IAM or DB credentials |
-| **Databricks on AWS** | Semantic Model (Import/DQ) | Databricks connector | OPDG | Public HTTPS or S2S VPN | Databricks PAT or OAuth (M2M) |
-| **Databricks on AWS** | Dataflow Gen2 | Databricks connector | OPDG | Public HTTPS or S2S VPN | Databricks PAT |
-| **Databricks on AWS** | Fabric Pipeline (Copy Activity) | Databricks connector | OPDG (private) / No (public) | Public HTTPS or S2S VPN | Databricks PAT or OAuth (M2M) |
+| **Redshift Serverless** | Same as above | Same connectors | Same rules (No gateway for public endpoint) | Public + TLS (RA3 public endpoint) or S2S VPN | IAM or DB credentials, Entra ID SSO |
+| **Databricks on AWS** | Semantic Model (Import/DQ) | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
+| **Databricks on AWS** | Dataflow Gen2 | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
+| **Databricks on AWS** | Fabric Pipeline (Copy Activity) | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
 | **Databricks on AWS** | Notebook (Spark) | Databricks Connect v2 or REST API | No | Public HTTPS | Databricks PAT or OAuth (M2M) |
 | **Databricks on AWS** | OneLake Shortcut | Shortcut → ADLS/S3 (Databricks-managed) | No | Public HTTPS | See S3 row above |
+| **SageMaker Unified Studio** | Semantic Model (Import/DQ) | No native connector — use Amazon Athena or ODBC | OPDG (Athena requires ODBC driver) | Public HTTPS or S2S VPN | DSN configuration (Athena ODBC), Organizational account |
+| **SageMaker Unified Studio** | Dataflow Gen2 | Amazon Athena connector or ODBC | OPDG | Public HTTPS or S2S VPN | DSN configuration, Organizational account |
+| **SageMaker Unified Studio** | Fabric Pipeline (Copy Activity) | No native connector — use S3 connector (for underlying storage) | No (public endpoint) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key (for S3 storage layer) |
+| **SageMaker Unified Studio** | Notebook (Spark) | `boto3` (S3), `pyathena`, or JDBC | No | Public HTTPS | IAM Access Key, STS AssumeRole, or Athena JDBC |
 
 ---
 
@@ -280,8 +284,9 @@ graph LR
 
 | Method | How it works | Pros | Cons | Recommended for |
 |---|---|---|---|---|
-| **Database user + password** | Traditional Redshift superuser or scoped user | Universal; works with all Fabric connectors | Static password; must rotate manually | Semantic Model, Dataflow Gen2, Pipeline — default method |
-| **IAM-based temporary credentials** | Call `redshift:GetClusterCredentials` API to get a temp DB user/password (15 min – 1 hr) | No static password; auto-expires | Requires OPDG custom script or Pipeline Web Activity to fetch creds before query | Notebooks; Pipeline (advanced) |
+| **Database user + password** | Traditional Redshift superuser or scoped user | Universal; works with all Fabric connectors; **no gateway needed** for public endpoints | Static password; must rotate manually | Semantic Model, Dataflow Gen2, Pipeline — default method |
+| **Microsoft Entra ID SSO** | Entra ID identity federated to Redshift via IAM IdP; user's token passed through | True SSO; no stored DB password; works **without gateway** (cloud connection) or with OPDG | Requires Redshift IAM federation with Entra ID; tenant admin must enable Redshift SSO setting | Semantic Model (DirectQuery) — recommended for per-user RLS |
+| **IAM-based temporary credentials** | Call `redshift:GetClusterCredentials` API to get a temp DB user/password (15 min – 1 hr) | No static password; auto-expires | Requires custom script or Pipeline Web Activity to fetch creds before query | Notebooks; Pipeline (advanced) |
 | **Redshift Serverless + IAM** | Workgroup attached to IAM role; federated access | Fully IAM-native; no DB passwords | Only Redshift Serverless; limited connector support | Spark notebooks via JDBC with IAM plugin |
 | **AWS Secrets Manager rotation** | Secrets Manager auto-rotates Redshift password on a schedule | Creds always fresh; no manual rotation | Fabric connection must be updated after each rotation (or use Pipeline secret lookup) | Environments with strict compliance |
 
@@ -325,8 +330,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA analytics GRANT SELECT ON TABLES TO fabric_re
 ```mermaid
 graph LR
     subgraph "Fabric Side"
+        FAB_DB["Fabric / Power BI\nService (Cloud)"]
         CONN_DB["Fabric Connection\n(Databricks)"]
-        OPDG_DB["OPDG\n(Databricks\nODBC/Spark)"]
+        OPDG_DB["OPDG\n(only if private\nworkspace)"]
     end
 
     subgraph "Databricks on AWS"
@@ -341,20 +347,25 @@ graph LR
         S3_DBR["S3 Bucket\n(managed storage)"]
     end
 
-    CONN_DB -->|PAT or OAuth M2M| OPDG_DB
-    OPDG_DB -->|HTTPS 443 / ODBC| SQLWH
+    CONN_DB -->|PAT or OAuth| FAB_DB
+    FAB_DB -->|HTTPS 443 cloud connection| SQLWH
+    CONN_DB -.->|PAT or OAuth| OPDG_DB
+    OPDG_DB -.->|HTTPS 443 via VPN| SQLWH
     SQLWH --> UC
     UC -->|fine-grained ACLs| S3_DBR
     DBRWS --- DBRAWS
     SCIM -.->|Sync groups from Entra ID| DBRWS
 ```
 
+> **Gateway requirement**: The Databricks connector supports **cloud connections** (no gateway) when the Databricks workspace has a **public endpoint**. OPDG is only required when the workspace is behind **Private Link** with no public access.
+
 #### Authentication Options
 
 | Method | How it works | Pros | Cons | Recommended for |
 |---|---|---|---|---|
-| **Personal Access Token (PAT)** | Long-lived token scoped to a Databricks user | Simple; supported by all Fabric connectors | User-scoped; no auto-expiry (must set manually); tied to individual | Semantic Model, Dataflow Gen2 — quick start |
-| **OAuth Machine-to-Machine (M2M)** | Databricks service principal + OAuth client credentials flow | No human identity; auto-token refresh; audit-friendly | Requires Databricks account-level SP; setup more complex | Production Pipelines, Semantic Models — recommended for prod |
+| **Personal Access Token (PAT)** | Long-lived token scoped to a Databricks user | Simple; supported by all Fabric connectors; **no gateway needed** for public workspaces | User-scoped; no auto-expiry (must set manually); tied to individual | Semantic Model, Dataflow Gen2 — quick start |
+| **OAuth (OIDC) / Machine-to-Machine (M2M)** | Databricks service principal + OAuth client credentials flow | No human identity; auto-token refresh; audit-friendly; **no gateway needed** for public workspaces | Requires Databricks account-level SP; setup more complex | Production Pipelines, Semantic Models — recommended for prod |
+| **Username / Password** | Basic auth with Databricks user credentials | Simple; works with cloud connection (no gateway) | Less secure than OAuth; must rotate manually | Quick PoC; not recommended for prod |
 | **OAuth User-Delegated (U2DP)** | End-user signs in via Entra ID → SSO into Databricks | True SSO; respects user-level Unity Catalog ACLs | Requires Entra ID federation with Databricks; not all connectors support it | Interactive / DirectQuery when per-user RLS is needed |
 | **Entra ID Federated Identity** | Databricks workspace linked to Entra ID via SCIM + SSO | Groups synced automatically; unified identity plane | Initial setup effort; requires Databricks Premium | Enterprise environments with centralised identity |
 
@@ -362,11 +373,12 @@ graph LR
 
 | Direction | Source | Destination | Port | Protocol | Purpose |
 |---|---|---|---|---|---|
-| Outbound | OPDG subnet | `*.cloud.databricks.com` | 443 | HTTPS | Databricks REST API + SQL Warehouse |
-| Outbound | OPDG subnet | Databricks Private Link (if enabled) | 443 | HTTPS (via S2S VPN) | Private connectivity to workspace |
-| AWS SG Inbound | OPDG NAT IP / VPN CIDR | Databricks SG (data plane) | 443 | HTTPS | Allow OPDG traffic |
+| Outbound | Fabric cloud service | `*.cloud.databricks.com` | 443 | HTTPS | Cloud connection (no gateway) to Databricks SQL Warehouse |
+| Outbound | OPDG subnet (if private) | `*.cloud.databricks.com` | 443 | HTTPS | Databricks REST API + SQL Warehouse via gateway |
+| Outbound | OPDG subnet (if private) | Databricks Private Link (if enabled) | 443 | HTTPS (via S2S VPN) | Private connectivity to workspace |
+| AWS SG Inbound | Fabric service IPs / OPDG NAT IP / VPN CIDR | Databricks SG (data plane) | 443 | HTTPS | Allow Fabric / OPDG traffic |
 
-#### Connection String / ODBC (on OPDG VM)
+#### Connection String / ODBC (on OPDG VM — only needed for private workspaces)
 
 | Setting | Value |
 |---|---|
@@ -408,6 +420,128 @@ graph LR
 
 ---
 
+### 3.4 AWS SageMaker Unified Studio
+
+> **No native Power Query connector exists** for SageMaker Unified Studio (as of March 2026). Data must be accessed through indirect paths.
+
+```mermaid
+graph LR
+    subgraph "Fabric Side"
+        FAB_SM["Fabric / Power BI"]
+        CONN_ATH["Fabric Connection\n(Amazon Athena)"]
+        CONN_S3B["Fabric Connection\n(S3 — underlying storage)"]
+        OPDG_ATH["OPDG\n(Athena ODBC)"]
+        NB_SM["Fabric Notebook\n(Spark)"]
+    end
+
+    subgraph "AWS SageMaker Unified Studio"
+        SM_LH["SageMaker\nLakehouse"]
+        GLUE["AWS Glue\nData Catalog"]
+        ATH["Amazon\nAthena"]
+        S3_SM["S3 Bucket\n(managed storage)"]
+    end
+
+    %% Path 1: Athena (SQL)
+    CONN_ATH -->|DSN config| OPDG_ATH
+    OPDG_ATH -->|ODBC 443| ATH
+    ATH --> GLUE
+    GLUE --> S3_SM
+
+    %% Path 2: S3 direct
+    FAB_SM -->|Shortcut or Pipeline| CONN_S3B
+    CONN_S3B -->|HTTPS (IAM Key)| S3_SM
+
+    %% Path 3: Notebook
+    NB_SM -->|pyathena / boto3| ATH
+    NB_SM -->|boto3 / s3a://| S3_SM
+
+    SM_LH --- GLUE
+    SM_LH --- S3_SM
+```
+
+#### Connectivity Options
+
+| Method | How it works | Gateway? | Pros | Cons | Recommended for |
+|---|---|---|---|---|---|
+| **Amazon Athena connector** | SQL queries via Athena ODBC driver against Glue Data Catalog tables | **OPDG** (Athena requires ODBC driver installed on gateway) | Full SQL interface; query any table in the SageMaker Lakehouse catalog | Requires OPDG and Athena ODBC driver; Athena per-query costs | Semantic Models (Import/DQ), Dataflow Gen2 |
+| **S3 Shortcut (OneLake)** | Direct shortcut to the underlying S3 bucket where SageMaker stores data | **No** | Zero-copy; no gateway; real-time access | Must know the S3 path; no SQL interface; read-only | Analytics on Parquet/Delta/Iceberg files in SageMaker storage |
+| **S3 Pipeline (Copy Activity)** | Copy data from the underlying S3 bucket to Lakehouse/Warehouse | **No** (public) / OPDG (VPC endpoint) | Can transform/stage data; supports write to Fabric | Data duplication; not real-time | ETL/staging workflows |
+| **Fabric Notebook** | Use `pyathena` (Python Athena client) or `boto3` to query Athena or read S3 directly | **No** | Full flexibility; combine with Spark transforms | Requires code; not suitable for direct Semantic Model binding | Data science / advanced ETL |
+
+#### Amazon Athena ODBC — Setup on OPDG
+
+| Setting | Value |
+|---|---|
+| Driver | `Amazon Athena ODBC Driver` v2.x (install on every OPDG node) |
+| DSN Type | **System DSN** (not User DSN — see Limitations) |
+| Region | e.g., `us-east-1` |
+| S3 Output Location | `s3://athena-query-results-<account>/` |
+| Authentication | IAM Access Key (Key ID + Secret) or SAML/Entra ID federation |
+| SSL | Enabled (always) |
+
+> **Important**: The Athena ODBC driver must be registered as a **System DSN**, not a User DSN. The OPDG service runs under a service account that does not load user-specific registry hives, causing `Data source name not found` errors if registered under User DSN.
+
+#### IAM Policy — Minimum Permissions for Athena + SageMaker Lakehouse
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "FabricAthenaReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution"
+      ],
+      "Resource": "arn:aws:athena:*:*:workgroup/fabric-workgroup"
+    },
+    {
+      "Sid": "GlueCatalogReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetPartitions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3DataAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::sagemaker-lakehouse-bucket",
+        "arn:aws:s3:::sagemaker-lakehouse-bucket/*"
+      ]
+    },
+    {
+      "Sid": "AthenaQueryResults",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::athena-query-results-*",
+        "arn:aws:s3:::athena-query-results-*/*"
+      ]
+    }
+  ]
+}
+```
+
+---
+
 ## 4. End-to-End Flow by Fabric Feature
 
 ### 4.1 OneLake Shortcut → S3
@@ -433,7 +567,7 @@ sequenceDiagram
 - Data is read at query time (no copy); caching controlled by OneLake
 - S3 bucket must allow `s3:GetObject` + `s3:ListBucket` from Fabric IPs
 
-### 4.2 Semantic Model (Import) → Redshift via OPDG
+### 4.2 Semantic Model (Import) → Redshift (Cloud Connection or OPDG)
 
 ```mermaid
 sequenceDiagram
@@ -442,22 +576,30 @@ sequenceDiagram
     participant GW as OPDG Node
     participant RS as AWS Redshift
 
-    Fabric->>SB: Refresh request
-    SB->>GW: Route to healthy node
-    GW->>RS: ODBC connection (port 5439, TLS)
-    Note over GW,RS: Auth: DB user/password or IAM temp creds
-    RS-->>GW: Query results (columnar)
-    GW-->>SB: Encrypted payload
-    SB-->>Fabric: Data loaded into Semantic Model
+    alt Redshift has public endpoint (no gateway)
+        Fabric->>RS: Direct HTTPS/TLS connection (port 5439)
+        Note over Fabric,RS: Auth: DB user/password or Entra ID SSO
+        RS-->>Fabric: Query results
+        Fabric->>Fabric: Data loaded into Semantic Model
+    else Redshift in private VPC (gateway required)
+        Fabric->>SB: Refresh request
+        SB->>GW: Route to healthy node
+        GW->>RS: ODBC connection (port 5439, TLS via S2S VPN)
+        Note over GW,RS: Auth: DB user/password or Entra ID SSO
+        RS-->>GW: Query results (columnar)
+        GW-->>SB: Encrypted payload
+        SB-->>Fabric: Data loaded into Semantic Model
+    end
 ```
 
 **Key points**:
-- OPDG is mandatory — Redshift connector requires it
-- Connection goes through S2S VPN (private) or public endpoint (TLS)
-- ODBC driver installed on every OPDG node
+- The Amazon Redshift connector supports **cloud connections** (no gateway) when Redshift has a **public endpoint** — the Power BI / Fabric service connects directly over HTTPS/TLS
+- OPDG is only required when Redshift is in a **private VPC** without a public endpoint
+- When using OPDG, the Amazon Redshift ODBC driver must be installed on every OPDG node
+- **Microsoft Entra ID SSO** is supported both via cloud connection (no gateway) and via OPDG — enable the *Redshift SSO* tenant setting in the Power BI Admin Portal
 - Credential stored in Fabric Connection (encrypted at rest)
 
-### 4.3 Pipeline Copy Activity → Databricks SQL Warehouse via OPDG
+### 4.3 Pipeline Copy Activity → Databricks SQL Warehouse (Cloud Connection or OPDG)
 
 ```mermaid
 sequenceDiagram
@@ -466,31 +608,38 @@ sequenceDiagram
     participant GW as OPDG Node
     participant DBR as Databricks SQL WH
 
-    PIPE->>SB: Copy Activity trigger
-    SB->>GW: Route request
-    GW->>DBR: HTTPS 443 (OAuth M2M token)
-    Note over GW,DBR: Auth: Client ID + Secret → Bearer token
-    DBR-->>GW: Result set (Arrow/CSV)
-    GW-->>SB: Return data
-    SB-->>PIPE: Sink to Lakehouse / Warehouse
+    alt Databricks has public endpoint (no gateway)
+        PIPE->>DBR: Direct HTTPS 443 (OAuth / PAT)
+        Note over PIPE,DBR: Auth: PAT, OAuth M2M, or Username/Password
+        DBR-->>PIPE: Result set (Arrow/CSV)
+        PIPE->>PIPE: Sink to Lakehouse / Warehouse
+    else Databricks behind Private Link (gateway required)
+        PIPE->>SB: Copy Activity trigger
+        SB->>GW: Route request
+        GW->>DBR: HTTPS 443 via S2S VPN (OAuth M2M token)
+        Note over GW,DBR: Auth: Client ID + Secret → Bearer token
+        DBR-->>GW: Result set (Arrow/CSV)
+        GW-->>SB: Return data
+        SB-->>PIPE: Sink to Lakehouse / Warehouse
+    end
 ```
 
 ---
 
 ## 5. Security Hardening Checklist
 
-| # | Control | AWS S3 | Redshift | Databricks |
-|---|---|---|---|---|
-| 1 | **Encrypt in transit** | TLS 1.2+ (enforced via bucket policy `aws:SecureTransport`) | SSL Mode = `verify-full` | HTTPS always (443) |
-| 2 | **Encrypt at rest** | SSE-S3 or SSE-KMS | AES-256 cluster encryption | Managed by Databricks (AWS KMS) |
-| 3 | **Restrict source IPs** | Bucket Policy with `aws:SourceIp` condition | Security Group inbound rules | IP Access List on workspace |
-| 4 | **Least-privilege IAM/DB** | `s3:GetObject`, `s3:ListBucket` only | `GRANT SELECT` on specific schemas | `GRANT SELECT` on Unity Catalog schemas |
-| 5 | **Credential rotation** | IAM key rotation every 90 days | DB password rotation via Secrets Manager | OAuth secret rotation every 180 days |
-| 6 | **Audit logging** | CloudTrail S3 data events | Redshift audit logging (STL_QUERY) | Databricks audit logs (Account Console) |
-| 7 | **Private networking** | S3 VPC Endpoint (Gateway type) | Enable private VPC subnet | Databricks Private Link |
-| 8 | **Block public access** | `s3:PublicAccessBlock` on account level | Disable public accessibility | Disable public network access |
-| 9 | **Monitor anomalies** | GuardDuty S3 protection | Redshift Advisor alerts | Databricks SQL alert on unusual queries |
-| 10 | **Secret storage** | Azure Key Vault → Fabric Connection | Azure Key Vault → Fabric Connection | Azure Key Vault → Fabric Connection |
+| # | Control | AWS S3 | Redshift | Databricks | SageMaker Unified Studio |
+|---|---|---|---|---|---|
+| 1 | **Encrypt in transit** | TLS 1.2+ (enforced via bucket policy `aws:SecureTransport`) | SSL Mode = `verify-full` | HTTPS always (443) | TLS 1.2+ (Athena/S3 endpoints) |
+| 2 | **Encrypt at rest** | SSE-S3 or SSE-KMS | AES-256 cluster encryption | Managed by Databricks (AWS KMS) | SSE-S3/SSE-KMS (underlying S3 storage) |
+| 3 | **Restrict source IPs** | Bucket Policy with `aws:SourceIp` condition | Security Group inbound rules | IP Access List on workspace | Athena workgroup policies + S3 bucket policy |
+| 4 | **Least-privilege IAM/DB** | `s3:GetObject`, `s3:ListBucket` only | `GRANT SELECT` on specific schemas | `GRANT SELECT` on Unity Catalog schemas | `athena:GetQueryResults`, `glue:GetTable`, `s3:GetObject` only |
+| 5 | **Credential rotation** | IAM key rotation every 90 days | DB password rotation via Secrets Manager | OAuth secret rotation every 180 days | IAM key rotation every 90 days |
+| 6 | **Audit logging** | CloudTrail S3 data events | Redshift audit logging (STL_QUERY) | Databricks audit logs (Account Console) | CloudTrail Athena + S3 data events |
+| 7 | **Private networking** | S3 VPC Endpoint (Gateway type) | Enable private VPC subnet | Databricks Private Link | Athena VPC endpoint + S3 VPC endpoint |
+| 8 | **Block public access** | `s3:PublicAccessBlock` on account level | Disable public accessibility | Disable public network access | `s3:PublicAccessBlock` on underlying buckets |
+| 9 | **Monitor anomalies** | GuardDuty S3 protection | Redshift Advisor alerts | Databricks SQL alert on unusual queries | CloudWatch Athena query volume alerts |
+| 10 | **Secret storage** | Azure Key Vault → Fabric Connection | Azure Key Vault → Fabric Connection | Azure Key Vault → Fabric Connection | Azure Key Vault → Fabric Connection |
 
 ---
 
@@ -506,6 +655,8 @@ sequenceDiagram
 | Pipeline S3 copy returns 0 rows | Bucket or prefix path is wrong; or IAM key has access to different bucket | Verify `bucket/prefix` in connection; check IAM policy `Resource` ARN |
 | VPN tunnel down | IKE phase 1/2 mismatch or BGP hold timer expired | Check Azure VPN Diagnostics + AWS VPN tunnel status; restart tunnel |
 | Slow Redshift queries through OPDG | VPN bandwidth saturated or Redshift WLM queue contention | Scale VPN GW to VpnGw3+; tune Redshift WLM; use `UNLOAD` to S3 + Shortcut pattern |
+| Athena query returns "Access Denied" | IAM user lacks `athena:GetQueryResults` or `glue:GetTable` | Add missing IAM actions; verify Athena workgroup permissions |
+| Athena ODBC DSN not found on OPDG | Driver registered under User DSN instead of System DSN | Reconfigure as System DSN (ODBC Data Source Administrator → System DSN tab) |
 
 ---
 
@@ -523,11 +674,23 @@ sequenceDiagram
 - **Decision**: Use OAuth M2M (service principal + client credentials) for all production workloads.
 - **Rationale**: PATs are user-scoped, don't auto-expire, and create audit ambiguity. OAuth M2M ties operations to a service principal, supports automatic token refresh, and aligns with enterprise identity governance.
 
-### ADR-03: Use S2S VPN for Redshift private clusters; public endpoint for Serverless PoCs
+### ADR-03: Use cloud connection for public Redshift; S2S VPN + OPDG for private clusters
 
-- **Context**: Redshift can be deployed in a private VPC subnet or with a public endpoint.
-- **Decision**: Production Redshift clusters use S2S VPN. Serverless or PoC deployments may use the public endpoint with IP restriction.
-- **Rationale**: Private VPC + VPN eliminates internet exposure. Public endpoint is acceptable for Serverless PoCs where VPN setup cost is not justified, provided IP whitelisting and TLS `verify-full` are enforced.
+- **Context**: Redshift can be deployed in a private VPC subnet or with a public endpoint. The Amazon Redshift connector in Fabric/Power BI supports **cloud connections** (no gateway) when a public endpoint is available.
+- **Decision**: Production Redshift clusters with public endpoints use the **cloud connection** (no OPDG) with IP whitelisting and TLS `verify-full`. Clusters in private VPC subnets use S2S VPN + OPDG. Serverless or PoC deployments may also use the public endpoint directly.
+- **Rationale**: The cloud connection path eliminates OPDG infrastructure management and driver maintenance for Redshift. Private VPC + VPN eliminates internet exposure for clusters that require strict network isolation. In both cases, TLS `verify-full` and Security Group IP whitelisting are enforced.
+
+### ADR-04: Use cloud connection for public Databricks workspaces; OPDG only for Private Link
+
+- **Context**: The Databricks connector supports cloud connections (no gateway) when the workspace has a public endpoint. Auth types include PAT, OAuth (OIDC), and Username/Password.
+- **Decision**: Public Databricks workspaces use **cloud connection** (no OPDG). Workspaces behind **Private Link** use OPDG with S2S VPN.
+- **Rationale**: Cloud connections reduce infrastructure overhead and are supported natively by the Databricks connector in Power Query Online. Private Link workspaces have no public endpoint and therefore require OPDG to bridge the network.
+
+### ADR-05: Access SageMaker Unified Studio data via Athena or S3 — no native connector
+
+- **Context**: AWS SageMaker Unified Studio does not have a native Power Query connector. Data in SageMaker Lakehouse is stored in S3 and catalogued via AWS Glue Data Catalog, which is queryable via Amazon Athena.
+- **Decision**: Use **Amazon Athena** connector (ODBC via OPDG) for structured/SQL queries against SageMaker Lakehouse tables. Use **S3 Shortcuts** or **S3 Pipeline connector** for direct file access to the underlying S3 storage.
+- **Rationale**: Athena provides a SQL interface to the Glue Data Catalog (which SageMaker Lakehouse uses). S3 Shortcuts provide a zero-copy, gateway-free path when data is in open formats (Parquet/Delta/Iceberg). There is no benefit to waiting for a native connector when these paths cover all use cases.
 
 ---
 
