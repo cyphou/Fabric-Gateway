@@ -57,7 +57,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 | **Clustering** | Yes — up to 10 nodes per cluster for HA and load distribution |
 | **Network** | Outbound HTTPS 443 (Service Bus, Entra ID, Graph, OneLake, Shortcut targets) + TDS 1433 (Fabric SQL/Mirroring/XMLA) + optional AMQP 5671-5672; no inbound ports |
 | **Install** | Windows Server (physical or VM); requires .NET Framework 4.8+ |
-| **Best for** | Oracle on-prem, SQL Server on-prem, SAP systems, file shares, **AWS RDS, Athena/ODBC, Redshift in private VPC, private Databricks, GCP Cloud SQL/BigQuery, any non-Azure cloud DB that lacks native cloud connectivity** |
+| **Best for** | Oracle on-prem, SQL Server on-prem, SAP systems, file shares, **AWS RDS, Athena/ODBC, optional private-routing patterns for Redshift, private Databricks, GCP Cloud SQL/BigQuery, any non-Azure cloud DB that lacks native cloud connectivity** |
 
 ### 2.2 On-premises Data Gateway (Personal Mode)
 

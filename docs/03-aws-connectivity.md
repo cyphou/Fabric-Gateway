@@ -27,10 +27,10 @@
 
 ## AWS Quick Answers
 
-| Service | Public endpoint supported without gateway? | Private path usually needs OPDG? | Best starting point |
+| Service | Public endpoint supported without gateway? | Is OPDG still an option? | Best starting point |
 |---|---|---|---|
 | S3 | Yes | Only for VPC endpoint or on-prem shortcut scenarios | Shortcut or native S3 connector |
-| Redshift | Yes | Yes | Native Redshift connector for public endpoints |
+| Redshift | Yes | Yes, but it is not mandatory | Native Redshift connector for public endpoints |
 | Databricks on AWS | Yes | Yes | Native Databricks connector for public SQL Warehouse |
 | SageMaker Unified Studio | No native connector | Yes for Athena ODBC path | Athena via OPDG or direct S3-based access |
 
@@ -47,7 +47,7 @@ This document separates AWS connectivity into two broad patterns:
 In practice, the current guidance is:
 
 - **S3**: usually direct, especially for Shortcuts and public connector paths; use OPDG only for VPC endpoint or on-prem shortcut scenarios.
-- **Redshift**: direct for public endpoints; OPDG for private VPC deployments.
+- **Redshift**: direct is the default pattern; OPDG remains optional when you deliberately choose a private-routing or driver-based path.
 - **Databricks on AWS**: direct for public SQL Warehouse endpoints; OPDG for Private Link or other private workspace patterns.
 - **SageMaker Unified Studio**: no native Power Query connector; use Athena via OPDG or direct S3-based access depending on the use case.
 
@@ -61,12 +61,12 @@ The rest of the document provides the implementation detail behind those four ru
 | **S3** | Fabric Pipeline (Copy Activity) | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key (stored in Fabric connection) |
 | **S3** | Dataflow Gen2 | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key |
 | **S3** | Notebook (Spark) | `boto3` / `s3a://` protocol | No | Public HTTPS | IAM Access Key or STS Assume-Role (env vars / Fabric secret) |
-| **Redshift** | Semantic Model (Import) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
-| **Redshift** | Semantic Model (DirectQuery) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
-| **Redshift** | Dataflow Gen2 | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials, Microsoft account, Organizational account |
-| **Redshift** | Fabric Pipeline (Copy Activity) | Amazon Redshift connector | No (public endpoint) / OPDG (private VPC) | Public + TLS or S2S VPN | Redshift DB credentials |
+| **Redshift** | Semantic Model (Import) | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
+| **Redshift** | Semantic Model (DirectQuery) | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
+| **Redshift** | Dataflow Gen2 | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account |
+| **Redshift** | Fabric Pipeline (Copy Activity) | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials |
 | **Redshift** | Notebook (Spark) | `redshift-connector` / JDBC | No | Public + TLS | Redshift DB credentials or IAM-based auth |
-| **Redshift Serverless** | Same as above | Same connectors | Same rules (No gateway for public endpoint) | Public + TLS (RA3 public endpoint) or S2S VPN | IAM or DB credentials, Entra ID SSO |
+| **Redshift Serverless** | Same as above | Same connectors | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | IAM or DB credentials, Entra ID SSO |
 | **Databricks on AWS** | Semantic Model (Import/DQ) | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
 | **Databricks on AWS** | Dataflow Gen2 | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
 | **Databricks on AWS** | Fabric Pipeline (Copy Activity) | Databricks connector | No (public endpoint) / OPDG (private workspace) | Public HTTPS or S2S VPN | Username/Password, PAT, OAuth (OIDC) |
@@ -135,12 +135,13 @@ graph TB
 
     %% Private paths
     OPDG <-->|IPsec Tunnel| VPNGW
-    VPNGW <-->|S2S VPN| RS
+    VPNGW <-.->|Optional private route| RS
     VPNGW <-->|S2S VPN| DBR_PRIV
     VPNGW <-->|S2S VPN| S3_EP
 
     %% Public paths
-    OPDG -->|HTTPS 443| RS_PUB
+    FAB -->|HTTPS 443| RS_PUB
+    OPDG -.->|Optional routed access| RS_PUB
     OPDG -->|HTTPS 443| DBR_PUB
     FAB -->|HTTPS 443| S3_PUB
     SC -->|HTTPS 443| S3_PUB
@@ -310,8 +311,9 @@ graph LR
 ```mermaid
 graph LR
     subgraph "Fabric Side"
-        CONN_RS["Fabric Connection\n(Redshift)"]
-        OPDG_RS["OPDG\n(Amazon Redshift\nODBC Driver)"]
+    FAB_RS["Fabric / Power BI\nService (Cloud)"]
+    CONN_RS["Fabric Connection\n(Redshift)"]
+    OPDG_RS["OPDG\n(optional Redshift\nODBC path)"]
     end
 
     subgraph "AWS Side"
@@ -320,11 +322,15 @@ graph LR
         SECRETS["AWS Secrets Manager\n(optional)"]
     end
 
-    CONN_RS -->|DB user + password| OPDG_RS
-    OPDG_RS -->|ODBC / TDS 5439| RS_CLUSTER
+    CONN_RS -->|DB user + password or Entra ID SSO| FAB_RS
+    FAB_RS -->|Cloud connection| RS_CLUSTER
+    CONN_RS -.->|Optional gateway path| OPDG_RS
+    OPDG_RS -.->|ODBC 5439| RS_CLUSTER
     IAM_RS -.->|Temporary DB creds| RS_CLUSTER
     SECRETS -.->|Auto-rotation| RS_CLUSTER
 ```
+
+  > **Gateway requirement**: The Amazon Redshift connector supports direct cloud connectivity and does **not** require OPDG. OPDG remains an **optional** pattern when teams choose a private routed path, reuse an existing gateway estate, or need an installed-driver execution model.
 
 #### Authentication Options
 
@@ -340,11 +346,12 @@ graph LR
 
 | Direction | Source | Destination | Port | Protocol |
 |---|---|---|---|---|
-| Outbound | OPDG subnet | Redshift cluster endpoint | 5439 | TCP (Postgres wire protocol) |
-| Outbound | OPDG subnet | Redshift Serverless endpoint | 5439 | TCP |
-| Inbound (AWS SG) | OPDG NAT IP / VPN CIDR | Redshift cluster SG | 5439 | TCP |
+| Outbound | Fabric cloud service | Redshift public endpoint | 5439 | TCP / TLS |
+| Outbound | OPDG subnet (optional path) | Redshift cluster endpoint | 5439 | TCP (Postgres wire protocol) |
+| Outbound | OPDG subnet (optional path) | Redshift Serverless endpoint | 5439 | TCP |
+| Inbound (AWS SG) | Fabric service IPs or OPDG NAT IP / VPN CIDR | Redshift cluster SG | 5439 | TCP |
 
-#### ODBC Driver Configuration (on OPDG VM)
+#### ODBC Driver Configuration (on OPDG VM — optional path only)
 
 | Setting | Value |
 |---|---|
@@ -355,7 +362,7 @@ graph LR
 | SSL Mode | `verify-full` (recommended) |
 | SSL CA | Amazon root CA bundle (pre-installed with driver) |
 
-> Install the latest **Amazon Redshift ODBC driver** on every OPDG node. Keep versions identical across the cluster.
+> Install the latest **Amazon Redshift ODBC driver** only when you intentionally use the optional OPDG path. Keep versions identical across gateway nodes if that path is enabled.
 
 #### Redshift User — Minimum Permissions
 
@@ -613,7 +620,7 @@ sequenceDiagram
 - Data is read at query time (no copy); caching controlled by OneLake
 - S3 bucket must allow `s3:GetObject` + `s3:ListBucket` from Fabric IPs
 
-### 4.2 Semantic Model (Import) → Redshift (Cloud Connection or OPDG)
+### 4.2 Semantic Model (Import) → Redshift (Direct by Default, OPDG Optional)
 
 ```mermaid
 sequenceDiagram
@@ -622,12 +629,12 @@ sequenceDiagram
     participant GW as OPDG Node
     participant RS as AWS Redshift
 
-    alt Redshift has public endpoint (no gateway)
-        Fabric->>RS: Direct HTTPS/TLS connection (port 5439)
-        Note over Fabric,RS: Auth: DB user/password or Entra ID SSO
-        RS-->>Fabric: Query results
-        Fabric->>Fabric: Data loaded into Semantic Model
-    else Redshift in private VPC (gateway required)
+  Fabric->>RS: Direct HTTPS/TLS connection (port 5439)
+  Note over Fabric,RS: Auth: DB user/password or Entra ID SSO
+  RS-->>Fabric: Query results
+  Fabric->>Fabric: Data loaded into Semantic Model
+
+  opt Optional routed path via OPDG
         Fabric->>SB: Refresh request
         SB->>GW: Route to healthy node
         GW->>RS: ODBC connection (port 5439, TLS via S2S VPN)
@@ -635,13 +642,13 @@ sequenceDiagram
         RS-->>GW: Query results (columnar)
         GW-->>SB: Encrypted payload
         SB-->>Fabric: Data loaded into Semantic Model
-    end
+  end
 ```
 
 **Key points**:
 - The Amazon Redshift connector supports **cloud connections** (no gateway) when Redshift has a **public endpoint** — the Power BI / Fabric service connects directly over HTTPS/TLS
-- OPDG is only required when Redshift is in a **private VPC** without a public endpoint
-- When using OPDG, the Amazon Redshift ODBC driver must be installed on every OPDG node
+- OPDG is **not mandatory** for Redshift; it is an **optional** network/runtime pattern
+- When using the optional OPDG path, the Amazon Redshift ODBC driver must be installed on every OPDG node
 - **Microsoft Entra ID SSO** is supported both via cloud connection (no gateway) and via OPDG — enable the *Redshift SSO* tenant setting in the Power BI Admin Portal
 - Credential stored in Fabric Connection (encrypted at rest)
 
@@ -720,11 +727,11 @@ sequenceDiagram
 - **Decision**: Use OAuth M2M (service principal + client credentials) for all production workloads.
 - **Rationale**: PATs are user-scoped, don't auto-expire, and create audit ambiguity. OAuth M2M ties operations to a service principal, supports automatic token refresh, and aligns with enterprise identity governance.
 
-### ADR-03: Use cloud connection for public Redshift; S2S VPN + OPDG for private clusters
+### ADR-03: Use direct cloud connection for Redshift by default; keep OPDG optional
 
-- **Context**: Redshift can be deployed in a private VPC subnet or with a public endpoint. The Amazon Redshift connector in Fabric/Power BI supports **cloud connections** (no gateway) when a public endpoint is available.
-- **Decision**: Production Redshift clusters with public endpoints use the **cloud connection** (no OPDG) with IP whitelisting and TLS `verify-full`. Clusters in private VPC subnets use S2S VPN + OPDG. Serverless or PoC deployments may also use the public endpoint directly.
-- **Rationale**: The cloud connection path eliminates OPDG infrastructure management and driver maintenance for Redshift. Private VPC + VPN eliminates internet exposure for clusters that require strict network isolation. In both cases, TLS `verify-full` and Security Group IP whitelisting are enforced.
+- **Context**: The Amazon Redshift connector in Fabric/Power BI supports **cloud connections** (no gateway) and should be treated as the default pattern for Redshift connectivity.
+- **Decision**: Use the **direct cloud connection** as the standard Redshift path. Keep OPDG available only as an **optional** routing/runtime choice when teams deliberately want a gateway-mediated or privately routed design.
+- **Rationale**: Direct cloud connectivity removes unnecessary infrastructure and aligns with current connector capabilities. OPDG remains available for specific network or operational preferences, but it is not a prerequisite for Redshift integration.
 
 ### ADR-04: Use cloud connection for public Databricks workspaces; OPDG only for Private Link
 

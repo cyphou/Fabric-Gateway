@@ -131,7 +131,7 @@ graph TB
 
     %% AWS to Gateway connections
     AWS_RDS -->|S2S VPN / Partner Peering| GW_PROD_NEU_A
-    AWS_RS -->|S2S VPN / Partner Peering\n(private) or HTTPS direct\n(public cloud connector)| GW_PROD_EUS_D
+    AWS_RS -.->|Optional private route\nvia OPDG| GW_PROD_EUS_D
     AWS_S3 -->|HTTPS public endpoint\nor direct shortcut| GW_PROD_NEU_D
     AWS_SM -->|Athena ODBC via OPDG\nor S3 direct access| GW_PROD_EUS_D
 
@@ -150,7 +150,7 @@ graph TB
     ASQL_EUS --> VGW_EUS
 
     %% Direct cloud connector paths
-    AWS_RS -.->|Public cloud connector| FAB_EUS
+    AWS_RS -->|Public cloud connector\n(default path)| FAB_EUS
     DBKS -.->|Public cloud connector| FAB_EUS
     AWS_S3 -.->|Shortcut / connector| FAB_NEU
 
