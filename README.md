@@ -55,8 +55,9 @@ flowchart LR
 3. Read [docs/03-aws-connectivity.md](docs/03-aws-connectivity.md) for the AWS deep dive covering S3, Redshift, Databricks on AWS, and SageMaker Unified Studio.
 4. Read [docs/04-gcp-connectivity.md](docs/04-gcp-connectivity.md) for the GCP deep dive covering BigQuery, Cloud SQL, and Google Cloud Storage.
 5. Read [docs/05-azure-connectivity.md](docs/05-azure-connectivity.md) for the Azure deep dive covering Azure SQL, SQL Managed Instance, Synapse SQL, Azure PostgreSQL, ADLS Gen2, Blob Storage, Azure Databricks, Azure Data Explorer, Azure Cosmos DB, and streaming patterns.
-6. Read [docs/06-cross-cloud-comparison.md](docs/06-cross-cloud-comparison.md) for the single-page decision grid across AWS, GCP, Azure, and SaaS.
-7. Read [docs/07-snowflake-connectivity.md](docs/07-snowflake-connectivity.md) and [docs/08-databricks-connectivity.md](docs/08-databricks-connectivity.md) for SaaS analytics deep dives.
+6. Read [docs/09-azure-streaming-connectivity.md](docs/09-azure-streaming-connectivity.md) for the dedicated Azure streaming guide covering Eventstream, the Streaming virtual network data gateway preview, Private Link, and migration from legacy Power BI streaming.
+7. Read [docs/06-cross-cloud-comparison.md](docs/06-cross-cloud-comparison.md) for the single-page decision grid across AWS, GCP, Azure, and SaaS.
+8. Read [docs/07-snowflake-connectivity.md](docs/07-snowflake-connectivity.md) and [docs/08-databricks-connectivity.md](docs/08-databricks-connectivity.md) for SaaS analytics deep dives.
 
 > [!TIP]
 > If your immediate question is "Do I need a gateway for this source?", start with the cloud-specific deep dive for your provider and then fall back to [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) for the general rule set.
@@ -150,6 +151,7 @@ Other cloud or SaaS
 | [docs/03-aws-connectivity.md](docs/03-aws-connectivity.md) | AWS-specific connector behavior, identity models, network options, security hardening | You need AWS implementation guidance |
 | [docs/04-gcp-connectivity.md](docs/04-gcp-connectivity.md) | GCP-specific connector behavior, shortcut patterns, private access options, security hardening | You need GCP implementation guidance |
 | [docs/05-azure-connectivity.md](docs/05-azure-connectivity.md) | Azure-native connector behavior, VNet gateway guidance, storage shortcut patterns, mirroring decisions, streaming architecture, and security hardening | You need Azure implementation guidance |
+| [docs/09-azure-streaming-connectivity.md](docs/09-azure-streaming-connectivity.md) | Azure streaming architecture, Eventstream private networking, streaming virtual network data gateway, and migration guidance | You need a dedicated guide for Azure streaming ingestion and private streaming patterns |
 | [docs/06-cross-cloud-comparison.md](docs/06-cross-cloud-comparison.md) | Fast comparison of decision rules across providers and source types | You want the shortest route to the right gateway pattern |
 | [docs/07-snowflake-connectivity.md](docs/07-snowflake-connectivity.md) | Snowflake-specific connector behavior, Entra ID SSO, and operational caveats | You need Snowflake implementation guidance |
 | [docs/08-databricks-connectivity.md](docs/08-databricks-connectivity.md) | Databricks-specific connector selection across AWS, Azure, and GCP | You need Databricks implementation guidance |
@@ -201,7 +203,8 @@ FabricGateway/
 │   ├── 05-azure-connectivity.md
 │   ├── 06-cross-cloud-comparison.md
 │   ├── 07-snowflake-connectivity.md
-│   └── 08-databricks-connectivity.md
+│   ├── 08-databricks-connectivity.md
+│   └── 09-azure-streaming-connectivity.md
 └── tasks/
     └── todo.md
 ```
