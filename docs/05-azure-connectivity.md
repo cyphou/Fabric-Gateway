@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Document-Azure%20Connectivity-1155CC?style=flat-square" alt="Azure Connectivity"/>
-    <img src="https://img.shields.io/badge/Services-Azure%20SQL%20%7C%20PostgreSQL%20%7C%20ADLS%20%7C%20Blob%20%7C%20Databricks%20%7C%20ADX%20%7C%20Cosmos-0F766E?style=flat-square" alt="Azure Services"/>
+    <img src="https://img.shields.io/badge/Services-Azure%20SQL%20%7C%20SQL%20MI%20%7C%20Synapse%20%7C%20ADLS%20%7C%20Blob%20%7C%20Databricks%20%7C%20ADX%20%7C%20Cosmos%20%7C%20Streaming-0F766E?style=flat-square" alt="Azure Services"/>
   <img src="https://img.shields.io/badge/Focus-Network%20%7C%20Identity%20%7C%20Connector%20Behavior-F2C811?style=flat-square&logoColor=000000" alt="Focus"/>
 </p>
 
@@ -21,7 +21,7 @@
 > **Version**: 1.0  
 > **Date**: 2026-03-16  
 > **Companion to**: [01-gateway-strategy.md](./01-gateway-strategy.md) | [02-gateway-architecture.md](./02-gateway-architecture.md)  
-> **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **Azure SQL Database**, **Azure Database for PostgreSQL**, **Azure Data Lake Storage Gen2**, **Azure Blob Storage**, **Azure Databricks**, **Azure Data Explorer**, and **Azure Cosmos DB**.  
+> **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **Azure SQL Database**, **Azure SQL Managed Instance**, **Azure Synapse Analytics SQL**, **Azure Database for PostgreSQL**, **Azure Data Lake Storage Gen2**, **Azure Blob Storage**, **Azure Databricks**, **Azure Data Explorer**, **Azure Cosmos DB**, and **Azure streaming sources through Fabric Real-Time Intelligence**.  
 
 ---
 
@@ -30,12 +30,15 @@
 | Service | Public endpoint supported without gateway? | Preferred private pattern | Is OPDG still an option? |
 |---|---|---|---|
 | Azure SQL Database | Yes | VNet Data Gateway | Yes, as fallback |
+| Azure SQL Managed Instance | Sometimes; depends on endpoint design | VNet Data Gateway | Yes, as fallback |
+| Azure Synapse Analytics SQL | Yes | VNet Data Gateway for private route | Yes |
 | Azure Database for PostgreSQL | Yes | VNet Data Gateway | Yes, as fallback |
 | ADLS Gen2 | Yes | Trusted workspace access or VNet-aware path | Yes, for specific storage firewall cases |
 | Azure Blob Storage | Yes | VNet Data Gateway for same-region firewall scenarios | Yes |
 | Azure Databricks | Yes | VNet Data Gateway or OPDG when workspace storage is private | Yes |
 | Azure Data Explorer | Yes | VNet Data Gateway | Yes |
 | Azure Cosmos DB | Yes, for connector and mirroring setup | Native Fabric mirroring or direct connector; private network bypass for mirroring | Limited fallback, but mirroring is preferred |
+| Azure Event Hubs / IoT / Service Bus streaming | Not through classic Power Query connectors | Fabric Eventstream with Private Link when needed | No classic gateway by default |
 
 > [!TIP]
 > Azure is where **VNet Data Gateway** should do most of the private-network heavy lifting. Use **OPDG** only when the workload is not supported by VNet Data Gateway or when you intentionally standardize on gateway-hosted runtime.
@@ -52,7 +55,7 @@ The practical rules are:
 
 This same VNet GW model can also be extended to **supported non-Azure connectors** when those sources are routed into Azure networking, but Azure remains the place where VNet GW is the strongest default.
 
-That makes Azure the least infrastructure-heavy cloud in this repository, but it still has important exceptions around storage firewalls, service principal behavior through gateways, Azure Databricks private storage access, and Azure Cosmos DB analytics patterns where mirroring is now the better design than legacy connector-first ingestion.
+That makes Azure the least infrastructure-heavy cloud in this repository, but it still has important exceptions around storage firewalls, service principal behavior through gateways, Azure Databricks private storage access, Azure SQL Managed Instance network design, and Azure streaming scenarios where the current Microsoft direction is **Fabric Real-Time Intelligence with Private Link**, not legacy Power BI streaming outputs.
 
 ## 1. Connectivity Summary Matrix
 
@@ -62,6 +65,10 @@ That makes Azure the least infrastructure-heavy cloud in this repository, but it
 | **Azure SQL Database** | Semantic Model (DirectQuery) | Azure SQL database connector | No for public endpoint; VNet GW for private endpoint | Public HTTPS / TDS or delegated VNet route | Microsoft account, Basic, Service Principal |
 | **Azure SQL Database** | Dataflow Gen2 | Azure SQL database connector | No for public endpoint; VNet GW for private endpoint | Public HTTPS / TDS or delegated VNet route | Microsoft account or Basic |
 | **Azure SQL Database** | Workload not supported by VNet GW | Azure SQL database via OPDG | Optional fallback | OPDG outbound TLS | Microsoft account or Basic |
+| **Azure SQL Managed Instance** | Semantic Model (Import / DirectQuery) | SQL Server or Azure SQL-aligned pattern to MI endpoint | Public endpoint optional; VNet GW for VNet-local or private endpoint | Port 1433 for VNet-local/private endpoint, 3342 for public endpoint | Database, Windows, Organizational account, Service principal depending on connector path |
+| **Azure SQL Managed Instance** | Dataflow Gen2 | SQL Server connector to MI endpoint | VNet GW by default for private route; OPDG fallback | Routed TCP to MI endpoint | Database, Windows, Organizational account |
+| **Azure Synapse Analytics SQL** | Semantic Model (DirectQuery) | Azure Synapse / Azure SQL DW pattern via Power BI Desktop | No for public endpoint; VNet GW for private route | Public HTTPS / SQL endpoint or private routed path | Microsoft Entra ID, database credentials |
+| **Azure Synapse Analytics SQL** | Semantic Model (Import) | Azure Synapse / Azure SQL DW pattern | No for public endpoint; VNet GW or OPDG for private route | Public or private routed SQL path | Microsoft Entra ID, database credentials |
 | **Azure Database for PostgreSQL** | Semantic Model (Import) | PostgreSQL connector | No for public endpoint; VNet GW for private endpoint | Public TCP with SSL or delegated VNet route | Database credentials or Microsoft account |
 | **Azure Database for PostgreSQL** | Semantic Model (DirectQuery) | PostgreSQL connector | No for public endpoint; VNet GW for private endpoint | Public TCP with SSL or delegated VNet route | Database credentials or Microsoft account |
 | **Azure Database for PostgreSQL** | Dataflow Gen2 | PostgreSQL connector | No for public endpoint; VNet GW for private endpoint | Public TCP with SSL or delegated VNet route | Database credentials |
@@ -75,12 +82,16 @@ That makes Azure the least infrastructure-heavy cloud in this repository, but it
 | **Azure Data Explorer** | Dataflow Gen2 | Azure Data Explorer connector | No for public cluster; VNet GW for private route | HTTPS to Kusto cluster | Organizational account |
 | **Azure Cosmos DB** | Semantic Model (Import / DirectQuery) | Azure Cosmos DB v2 connector | Not required for public endpoint, but not preferred for new projects | HTTPS to Cosmos endpoint | Feed key or Organizational account |
 | **Azure Cosmos DB** | Fabric analytics landing zone | Fabric Mirroring for Azure Cosmos DB | No gateway; use network ACL bypass for private account | Fabric-managed near real-time replication into OneLake | Entra ID with RBAC or account keys |
+| **Azure Event Hubs / IoT Hub / Service Bus** | Real-time ingestion | Fabric Eventstream source connector | No classic gateway; use Workspace Private Link for supported private inbound scenarios | Eventstream ingress path into Fabric | Source-specific secrets, connection strings, or Entra ID depending on connector |
+| **Azure Stream Analytics** | Real-time Power BI output | Legacy Power BI streaming output | No gateway, but deprecated direction | REST push into Power BI streaming semantic model | Power BI authorization or managed identity |
 
 ### 1.1 Where VNet Data Gateway Fits in Azure
 
 For Azure, VNet Data Gateway is the primary private-network option and should be assumed first for:
 
 - **Azure SQL Database** private endpoints,
+- **Azure SQL Managed Instance** VNet-local or private endpoint designs,
+- **Azure Synapse SQL** when the SQL endpoint is not exposed publicly,
 - **Azure Database for PostgreSQL** private endpoints,
 - **Azure Data Lake Storage Gen2** private connectivity scenarios that fall inside the supported workload model, and
 - **Azure Blob Storage** when firewall behavior or same-region Power Query constraints make direct access unsuitable,
@@ -88,6 +99,8 @@ For Azure, VNet Data Gateway is the primary private-network option and should be
 - **Azure Data Explorer** when the Kusto cluster is reachable only through private routing.
 
 For **Azure Cosmos DB**, prefer **Fabric mirroring** before considering the legacy Power Query connector.
+
+For **Azure streaming**, treat **Fabric Eventstream plus Real-Time hub and Private Link** as a separate pattern rather than as another OPDG or VNet GW workload.
 
 OPDG remains a fallback, not the default.
 
@@ -128,15 +141,20 @@ graph TB
 
     subgraph AzureServices
         SQL["Azure SQL Database"]
+        SQLMI["Azure SQL Managed Instance"]
+        SYN["Azure Synapse SQL"]
         PG["Azure PostgreSQL"]
         ADLS["ADLS Gen2"]
         BLOB["Azure Blob Storage"]
         DBR["Azure Databricks"]
         ADX["Azure Data Explorer"]
         COSMOS["Azure Cosmos DB"]
+        STREAM["Azure Streaming Sources"]
     end
 
     FAB -->|Direct cloud path| SQL
+    FAB -->|Connector path| SQLMI
+    FAB -->|Connector path| SYN
     FAB -->|Direct cloud path| PG
     FAB -->|Native connector| DBR
     FAB -->|Native connector| ADX
@@ -144,13 +162,18 @@ graph TB
     SC -->|Shortcut path| BLOB
     PQO -->|Import path| BLOB
     FAB -->|Mirror or connector| COSMOS
+    STREAM -->|Eventstream / RTI| FAB
 
     VNET -.->|Private endpoint access| SQL
+    VNET -.->|Private endpoint access| SQLMI
+    VNET -.->|Private SQL route| SYN
     VNET -.->|Private endpoint access| PG
     VNET -.->|Firewall workaround| BLOB
     VNET -.->|Private storage or cluster path| DBR
     VNET -.->|Private cluster path| ADX
     OPDG -.->|Fallback path| SQL
+    OPDG -.->|Fallback path| SQLMI
+    OPDG -.->|Fallback path| SYN
     OPDG -.->|Fallback path| PG
     OPDG -.->|Fallback path| BLOB
     OPDG -.->|Fallback path| DBR
@@ -161,9 +184,10 @@ graph TB
 
 | Pattern | Use it for | Why |
 |---|---|---|
-| **Direct cloud path** | Public Azure SQL, public Azure PostgreSQL, standard storage access | Lowest complexity |
+| **Direct cloud path** | Public Azure SQL, Synapse SQL, public Azure PostgreSQL, standard storage access | Lowest complexity |
 | **VNet Data Gateway** | Private endpoints and Azure-native private connectivity | Best-aligned Azure design |
 | **Fabric-native replication** | Azure Cosmos DB analytical landing into OneLake | Best analytical pattern for near real-time HTAP-style reporting |
+| **Real-Time Intelligence path** | Event-driven ingestion from Azure streams and CDC sources | Modern streaming pattern that avoids legacy Power BI streaming constraints |
 | **OPDG fallback** | Unsupported VNet GW workloads or explicit gateway runtime standardization | Keeps a single escape hatch for edge cases |
 
 ---
@@ -217,6 +241,49 @@ graph LR
 - Public flexible server: direct connector with SSL.
 - Private endpoint: VNet Data Gateway.
 - Unsupported workload on VNet GW: OPDG fallback.
+
+### 3.2b Azure SQL Managed Instance
+
+```mermaid
+graph LR
+    APP["Fabric or Power BI"] -->|SQL connector| ENDPT["SQL MI Endpoint"]
+    ENDPT -->|VNet-local or private endpoint| MI["Azure SQL Managed Instance"]
+    VNET["VNet Data Gateway"] -.->|Preferred private route| ENDPT
+    OPDG["OPDG"] -.->|Fallback route| ENDPT
+```
+
+#### Key points
+
+- Azure SQL Managed Instance is deployed inside a **customer virtual network** and supports **VNet-local**, **public**, and **private endpoint** access models.
+- The **VNet-local endpoint** is the default connectivity model and listens on **1433**.
+- The **public endpoint** is optional and listens on **3342**.
+- For Fabric and Power BI, the practical consequence is that private MI designs usually require **VNet Data Gateway** or **OPDG**.
+
+#### Recommendation
+
+- Use the **public endpoint** only when policy allows and you explicitly want internet-reachable client connectivity.
+- For enterprise MI deployments, assume **VNet Data Gateway** first.
+- Keep **OPDG** as fallback where the workload or connector path still expects classic gateway semantics.
+
+### 3.2c Azure Synapse Analytics SQL
+
+```mermaid
+graph LR
+    PBI["Power BI Desktop or Service"] -->|DirectQuery / Import| SYN["Azure Synapse SQL Endpoint"]
+    SYN -->|Optional SSO| ENTRA["Microsoft Entra ID"]
+```
+
+#### Key points
+
+- Microsoft’s current guidance is to build the connection in **Power BI Desktop** and then publish; the old direct connector experience in the Power BI service is no longer the preferred route.
+- Synapse SQL behaves as a **DirectQuery-friendly** analytical endpoint and supports **SSO with Microsoft Entra ID OAuth2** when configured correctly.
+- Public endpoints can connect directly; private SQL exposure should follow the same **VNet GW first, OPDG fallback** pattern as other private Azure SQL services.
+
+#### Recommendation
+
+- Public dedicated SQL pool or SQL endpoint: direct connection.
+- Private network-only Synapse SQL: **VNet Data Gateway**.
+- Use **OPDG** only if the workload cannot use VNet GW or if you standardize on a shared gateway runtime.
 
 ### 3.3 ADLS Gen2
 
@@ -329,6 +396,34 @@ graph LR
 - Use the **v2 connector** only for existing/reporting scenarios that specifically need connector-based access.
 - For AI or nested JSON workloads, mirroring is materially stronger than the legacy connector because it lands the data in OneLake and supports downstream SQL, Spark, and Direct Lake patterns.
 
+### 3.8 Azure Streaming Sources and the New Streaming Pattern
+
+```mermaid
+graph LR
+    EH["Azure Event Hubs"] --> ES["Fabric Eventstream"]
+    IOT["Azure IoT Hub"] --> ES
+    SB["Azure Service Bus"] --> ES
+    CDC["Azure SQL / Cosmos CDC"] --> ES
+    ES --> HUB["Real-Time Hub"]
+    ES --> EHOUSE["Eventhouse or Lakehouse"]
+    ES --> PBI["Real-Time Dashboards or Power BI"]
+    PL["Workspace Private Link"] -.-> ES
+```
+
+#### Key points
+
+- The current Microsoft direction for streaming is **Fabric Real-Time Intelligence**, especially **Eventstream**, **Real-Time hub**, and downstream **Eventhouse**, **Lakehouse**, or **Activator** patterns.
+- This is not a third classic gateway like **OPDG** or **VNet Data Gateway**. It is better documented as a **streaming ingestion architecture**.
+- Eventstream supports Azure-native streaming inputs such as **Azure Event Hubs**, **Azure IoT Hub**, **Azure Service Bus**, **Azure Data Explorer**, **Azure SQL CDC**, **Azure Cosmos DB CDC**, and others.
+- For private inbound streaming, Microsoft now supports **Tenant Private Link** and **Workspace Private Link** for selected Eventstream scenarios.
+- Legacy **Power BI real-time streaming** and **Azure Stream Analytics output to Power BI** remain available for now, but Microsoft recommends migrating to **Fabric Real-Time Intelligence**, and creation of new Power BI streaming models is scheduled to stop after **2027-10-31**.
+
+#### Recommendation
+
+- New streaming design: use **Fabric Eventstream** and **Real-Time hub**.
+- Need private inbound connectivity for supported sources: use **Workspace Private Link** rather than treating streaming as an OPDG use case.
+- Keep legacy Power BI streaming only for existing solutions that you are not ready to migrate yet.
+
 ---
 
 ## 4. End-to-End Flow by Fabric Feature
@@ -389,6 +484,20 @@ sequenceDiagram
     OneLake-->>BI: Expose analytics-ready data
 ```
 
+### 4.5 Real-Time Ingestion from Azure Event Hubs
+
+```mermaid
+sequenceDiagram
+    participant Source as Azure Event Hubs
+    participant ES as Fabric Eventstream
+    participant RTI as Real-Time Hub or Eventhouse
+    participant Dash as Dashboard or Activator
+
+    Source->>ES: Stream events
+    ES->>RTI: Transform and route events
+    RTI-->>Dash: Expose live insights and actions
+```
+
 ---
 
 ## 5. Security Hardening Checklist
@@ -396,12 +505,14 @@ sequenceDiagram
 - Prefer **VNet Data Gateway** over OPDG for Azure private endpoints.
 - Use **Service Principal** only on direct cloud connections where the connector supports it end to end.
 - Require **SSL or encrypted connections** for Azure SQL and PostgreSQL.
+- For **Azure SQL Managed Instance**, validate endpoint type, DNS, and routed port requirements before choosing a connector path.
 - Prefer **RBAC plus ACLs** over account keys for ADLS Gen2 where possible.
 - Use **SAS** only with narrow scope and short lifetime.
 - Avoid broad storage account keys for production shortcuts unless no delegated auth model is viable.
 - Enable **trusted workspace access** for ADLS instead of broad firewall exceptions when supported.
 - For **Azure Databricks**, validate both the SQL warehouse path and the backing storage access path.
 - For **Azure Cosmos DB**, prefer **Entra ID plus RBAC** for mirroring and enable only the minimum required network bypass settings.
+- For **Azure streaming**, prefer **Private Link-enabled Eventstream** over legacy Power BI streaming endpoints where private access matters.
 
 ---
 
@@ -410,6 +521,8 @@ sequenceDiagram
 | Symptom | Likely cause | Action |
 |---|---|---|
 | Azure SQL service principal works direct but not through gateway | Unsupported auth through OPDG or VNet GW | Switch to Microsoft account or Basic for gateway path |
+| Azure SQL Managed Instance is reachable from SSMS but not from Fabric | MI uses VNet-local or private endpoint with no delegated Fabric route | Use VNet GW or OPDG and validate DNS plus port selection |
+| Synapse report works in Desktop but not through the old service pattern | Service-side direct connector path is no longer the preferred model | Build and publish from Desktop, then configure the published semantic model |
 | Azure PostgreSQL private server not reachable | No delegated VNet or no OPDG fallback | Use VNet GW or route OPDG appropriately |
 | Blob connector fails in same region with firewall enabled | Known Power Query Online storage limitation | Use VNet GW or OPDG |
 | ADLS shortcut auth fails with Entra-based identity | Missing RBAC, ACLs, or delegation key rights | Validate RBAC, ACLs, and delegated key permissions |
@@ -417,6 +530,7 @@ sequenceDiagram
 | Azure Databricks query succeeds but large results fail | CloudFetch cannot reach private workspace storage | Use VNet GW or OPDG, or disable CloudFetch |
 | Azure Data Explorer DirectQuery query is brittle | Complex KQL embedded in Power Query | Move logic into Kusto functions |
 | Azure Cosmos DB analytics design is slow or schema-fragile | Legacy v2 connector used for evolving or nested JSON workloads | Prefer Fabric mirroring |
+| Streaming architecture still targets Power BI streaming semantic models | Legacy pattern approaching retirement | Migrate to Eventstream and Real-Time Intelligence |
 
 ---
 
@@ -445,3 +559,9 @@ sequenceDiagram
 **Decision**: Use Fabric Mirroring as the default analytics pattern for Azure Cosmos DB.  
 **Why**: Microsoft no longer recommends the v2 connector for new projects, and mirroring gives near real-time OneLake replication without gateway infrastructure.  
 **Consequence**: Azure Cosmos DB joins the Azure-native path set where the best design is gateway-free by default.
+
+### ADR-05 — Azure streaming should use Fabric Real-Time Intelligence, not legacy Power BI streaming
+
+**Decision**: Treat Azure streaming as a Real-Time Intelligence architecture pattern built on Eventstream, Real-Time hub, Eventhouse, and Private Link where supported.  
+**Why**: Microsoft is deprecating new Power BI real-time streaming model creation and recommends Fabric Real-Time Intelligence as the target architecture.  
+**Consequence**: Streaming is documented separately from OPDG and VNet GW instead of being forced into the classic gateway model.
