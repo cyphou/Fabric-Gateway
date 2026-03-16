@@ -31,7 +31,7 @@
 |---|---|
 | Regional model | Hub-and-spoke gateway tiers aligned to Fabric capacity regions |
 | Runtime split | Separate gateway clusters for analytics vs data integration workloads |
-| Multi-cloud pattern | Native cloud connectors where supported; OPDG for private or driver-based access |
+| Multi-cloud pattern | Native cloud connectors first; VNet GW for supported connector paths over Azure networking; OPDG for private, driver-based, or unsupported paths |
 | High availability | Active-active OPDG clusters with at least 2 nodes, 3 recommended for production |
 | Operational posture | Standardized VM sizing, driver stack, monitoring, patching, and recovery key management |
 
@@ -42,7 +42,7 @@
 
 The architecture deploys a **hub-and-spoke gateway model** where each Azure region hosts a self-contained gateway tier, aligned to the Fabric capacity in that region. Gateways are separated by **workload type** (analytics vs. data integration) and **environment** (production vs. non-production).
 
-The design explicitly covers **multi-cloud connectivity** — data sources hosted on AWS, GCP, or other providers connect either through **native cloud connectors** from Fabric / Power BI or through **OPDG clusters in Azure** via Site-to-Site VPN, ExpressRoute partner peering, or secure public endpoints when private or driver-based access is required.
+The design explicitly covers **multi-cloud connectivity** — data sources hosted on AWS, GCP, or other providers connect either through **native cloud connectors** from Fabric / Power BI, through **VNet Data Gateway** when the connector is supported over Azure networking, or through **OPDG clusters in Azure** via Site-to-Site VPN, ExpressRoute partner peering, or secure public endpoints when private or driver-based access is required.
 
 ### 1.1 High-Level Architecture Diagram
 
@@ -144,10 +144,13 @@ graph TB
     SNOW -->|HTTPS public endpoint| GW_PROD_EUS_A
     DBKS -->|HTTPS public endpoint| GW_PROD_EUS_D
 
-    %% VNet Gateway to Azure sources
+    %% VNet Gateway to Azure and supported external sources
     PG_NEU --> VGW_NEU
     ASQL_NEU --> VGW_NEU
     ASQL_EUS --> VGW_EUS
+    AWS_RS -.->|Supported connector path\nvia VPN or public route| VGW_EUS
+    GCP_BQ -.->|Supported connector path\nvia public or VPN route| VGW_NEU
+    GCP_SQL -.->|Supported PostgreSQL path\nvia VPN route| VGW_NEU
 
     %% Direct cloud connector paths
     AWS_RS -->|Public cloud connector\n(default path)| FAB_EUS

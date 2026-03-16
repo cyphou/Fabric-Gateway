@@ -34,6 +34,9 @@
 | Databricks on AWS | Yes | Yes | Native Databricks connector for public SQL Warehouse |
 | SageMaker Unified Studio | No native connector | Yes for Athena ODBC path | Athena via OPDG or direct S3-based access |
 
+> [!NOTE]
+> For supported connector-based workloads, **VNet Data Gateway is also feasible for some AWS sources** when the route is provided through Azure networking such as VPN or ExpressRoute. In practice this is relevant for connector paths such as **Amazon Redshift**, **Amazon S3**, and **Databricks**. It does **not** replace shortcut-native patterns or ODBC-heavy SageMaker / Athena scenarios, where OPDG remains the clearer design.
+
 > [!TIP]
 > This document is the operational answer key for AWS connectivity decisions. Use it when the strategy says "AWS" and you need the exact connector, gateway, identity, and network path.
 
@@ -76,6 +79,23 @@ The rest of the document provides the implementation detail behind those four ru
 | **SageMaker Unified Studio** | Dataflow Gen2 | Amazon Athena connector or ODBC | OPDG | Public HTTPS or S2S VPN | DSN configuration, Organizational account |
 | **SageMaker Unified Studio** | Fabric Pipeline (Copy Activity) | No native connector — use S3 connector (for underlying storage) | No (public endpoint) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key (for S3 storage layer) |
 | **SageMaker Unified Studio** | Notebook (Spark) | `boto3` (S3), `pyathena`, or JDBC | No | Public HTTPS | IAM Access Key, STS AssumeRole, or Athena JDBC |
+
+### 1.1 Where VNet Data Gateway Fits for AWS
+
+VNet Data Gateway is not the default AWS recommendation, but it is a **feasible option** for supported connector-based workloads because Microsoft documents VNet GW support for sources such as **Amazon Redshift**, **Amazon S3**, and **Databricks**, including scenarios where the source is reached through public endpoints or through Azure networking with VPN / ExpressRoute.
+
+Use it when:
+
+- the workload is inside the VNet GW support envelope, and
+- you want Azure-managed gateway compute instead of Windows gateway VMs, and
+- the AWS source is reachable from Azure networking.
+
+Keep **OPDG** as the preferred choice when you need:
+
+- driver or DSN installation,
+- shortcut-to-on-prem bridging,
+- SageMaker / Athena ODBC patterns, or
+- workloads not supported by VNet GW.
 
 ---
 

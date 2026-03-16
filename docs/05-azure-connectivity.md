@@ -47,6 +47,8 @@ The practical rules are:
 2. Use **VNet Data Gateway** when the Azure service is exposed only through a **private endpoint** or when Power Query Online requires a private route.
 3. Use **OPDG** only as a workload fallback, especially for patterns not covered by VNet Data Gateway or where the execution engine still depends on gateway runtime semantics.
 
+This same VNet GW model can also be extended to **supported non-Azure connectors** when those sources are routed into Azure networking, but Azure remains the place where VNet GW is the strongest default.
+
 That makes Azure the least infrastructure-heavy cloud in this repository, but it still has important exceptions around storage firewalls, service principal behavior through gateways, and unsupported workload combinations.
 
 ## 1. Connectivity Summary Matrix
@@ -64,6 +66,17 @@ That makes Azure the least infrastructure-heavy cloud in this repository, but it
 | **ADLS Gen2** | Lakehouse / Direct Lake | Shortcut-backed lakehouse | No | DFS endpoint over HTTPS | Connection bound to shortcut |
 | **Azure Blob Storage** | Semantic Model / Dataflow Import | Azure Blob Storage connector | No in standard case; VNet GW or OPDG for same-region firewall edge case | Blob endpoint over HTTPS | Anonymous, Account key, Organizational account, SAS, Service principal |
 | **Azure Blob Storage** | OneLake Shortcut | Shortcut → Azure Blob Storage | No | Blob endpoint over HTTPS | Organizational account, Service principal, Workspace identity, SAS, Account key |
+
+### 1.1 Where VNet Data Gateway Fits in Azure
+
+For Azure, VNet Data Gateway is the primary private-network option and should be assumed first for:
+
+- **Azure SQL Database** private endpoints,
+- **Azure Database for PostgreSQL** private endpoints,
+- **Azure Data Lake Storage Gen2** private connectivity scenarios that fall inside the supported workload model, and
+- **Azure Blob Storage** when firewall behavior or same-region Power Query constraints make direct access unsuitable.
+
+OPDG remains a fallback, not the default.
 
 ---
 

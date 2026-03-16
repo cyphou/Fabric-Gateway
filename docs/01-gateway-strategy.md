@@ -32,7 +32,7 @@
 | Primary decision | Use the lightest viable connectivity model: native cloud connector first, OPDG when privacy, drivers, or workload limitations require it |
 | Standard model | Centralized IT owns shared gateway infrastructure; business teams consume managed connections |
 | Azure-native private sources | Prefer VNet Data Gateway |
-| On-premises and private multi-cloud sources | Use OPDG in Azure-hosted HA clusters |
+| On-premises and private multi-cloud sources | Use OPDG in Azure-hosted HA clusters unless a supported connector can use VNet Data Gateway over VPN / ExpressRoute |
 | Main design goal | Reduce gateway sprawl while keeping performance, security, and operational ownership predictable |
 
 > [!TIP]
@@ -77,7 +77,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 | **Clustering** | No — managed by Microsoft, auto-scales |
 | **Network** | Delegates into your VNet subnet; no VM to manage |
 | **Limitations** | Does NOT support Paginated Reports or Power BI Dataflows Gen1 |
-| **Best for** | Azure-hosted PostgreSQL, Azure SQL, Azure Synapse private endpoints |
+| **Best for** | Azure-hosted PostgreSQL, Azure SQL, Azure Synapse private endpoints, and supported external connectors routed through Azure networking |
 
 ### 2.4 Decision Matrix
 
@@ -106,7 +106,7 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
    VNet sources)
 ```
 
-> **Multi-cloud rule**: VNet Data Gateway **only** works with data sources inside an Azure VNet. For sources on AWS, GCP, or other cloud providers, use either a **native cloud connector** when supported or **On-premises Data Gateway (Standard)** when the source is private, driver-based, or otherwise requires gateway mediation.
+> **Multi-cloud rule**: VNet Data Gateway is still the first choice for Azure private endpoints, but it can also be used for certain **supported external connectors** when those sources are reached through Azure networking such as VPN or ExpressRoute. For AWS, GCP, or other cloud providers, use **native cloud connectivity** first, **VNet Data Gateway** where Microsoft explicitly supports that connector over Azure networking, and **OPDG** when the source is private, driver-based, shortcut-based, or outside the VNet gateway workload envelope.
 
 ---
 
@@ -142,16 +142,18 @@ The strategy addresses **six workload categories**: Power BI Semantic Models (Im
 - Disable personal gateway installs via **Fabric Admin Portal → Tenant Settings**
 - Only Standard mode gateways managed by IT
 
-### 3.5 VNet Gateways for Azure-Native Sources
+### 3.5 VNet Gateways for Azure-Native and Supported External Sources
 
 - Every Azure PaaS data source with private endpoint connectivity **must** use VNet Data Gateway
 - Eliminates VM management overhead for cloud-to-cloud data movement
 - Use OPDG only when VNet Gateway has a workload limitation (Paginated Reports, Dataflows Gen1)
+- For selected **AWS and GCP connectors** that Microsoft lists as supported on VNet Data Gateway, VNet GW is also feasible when the source is reached through Azure networking such as site-to-site VPN or ExpressRoute
+- Typical candidates include connector-based access to **Amazon Redshift**, **Amazon S3**, **Databricks**, **Google BigQuery**, **Google Cloud Storage**, and **PostgreSQL** when the workload is inside the VNet GW support envelope
 
 ### 3.6 OPDG as the Multi-Cloud Bridge
 
-- **VNet Data Gateway has no cross-cloud capability**
 - **Some non-Azure cloud sources can connect directly** from Fabric / Power BI without OPDG when Microsoft provides a native cloud connector (for example, public Amazon Redshift or public Databricks SQL Warehouse)
+- **Some non-Azure cloud sources can also use VNet Data Gateway** when the connector is supported and the route is provided through Azure networking
 - **Use OPDG when the non-Azure source is private, uses a VPC endpoint / Private Link, or depends on an installed driver / DSN**
 - Place OPDG gateway VMs in Azure (closest region to the Fabric capacity), not inside the other cloud
 - Connect to external cloud sources via:

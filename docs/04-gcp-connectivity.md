@@ -33,6 +33,9 @@
 | Cloud SQL for PostgreSQL | Yes | Yes | PostgreSQL connector for public IP, OPDG for private IP |
 | GCS | Yes | Yes for on-prem or network-restricted shortcut paths | OneLake GCS shortcut |
 
+> [!NOTE]
+> For supported connector-based workloads, **VNet Data Gateway is also feasible for some GCP sources** when they are reached through Azure networking such as VPN or ExpressRoute. The main cases in this repo are **Google BigQuery**, **Google Cloud Storage** connector paths, and **Cloud SQL for PostgreSQL** through the PostgreSQL connector. Shortcut-native GCS patterns remain direct rather than gateway-mediated.
+
 > [!TIP]
 > For GCP, the clean split is simple: **BigQuery is usually direct**, **Cloud SQL depends on public versus private IP exposure**, and **GCS is best consumed through OneLake shortcuts rather than a traditional Power Query database connector**.
 
@@ -69,6 +72,23 @@ The remaining sections turn those rules into concrete implementation guidance fo
 | **GCS** | Lakehouse / Direct Lake consumption | OneLake shortcut-backed lakehouse | No | Public HTTPS | Connection bound to shortcut |
 | **GCS** | Notebook (Spark / Python) | `gcsfs`, REST, or lakehouse shortcut path | No | Public HTTPS | HMAC key or service account pattern outside shortcut |
 | **GCS** | On-prem or network-restricted storage path | GCS shortcut via OPDG | Optional | OPDG outbound HTTPS | HMAC key |
+
+### 1.1 Where VNet Data Gateway Fits for GCP
+
+VNet Data Gateway is not the default GCP recommendation, but it is a **feasible option** for supported connector-based workloads because Microsoft documents VNet GW support for sources such as **Google BigQuery**, **Google Cloud Storage**, and **PostgreSQL**.
+
+Use it when:
+
+- the connector is supported on VNet GW,
+- the workload is one of the supported Fabric / Power BI workloads, and
+- the GCP source is reachable from the Azure VNet, either publicly or through VPN / ExpressRoute.
+
+Keep **OPDG** as the preferred path when you need:
+
+- private Cloud SQL access with patterns outside the VNet GW workload envelope,
+- installed drivers or DSNs,
+- notebook-specific runtime libraries, or
+- shortcut/on-prem bridging.
 
 ---
 

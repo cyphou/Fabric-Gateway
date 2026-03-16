@@ -29,8 +29,9 @@ The architecture bias across this repository is now explicit:
 
 1. **Direct cloud connection first** when the connector is supported and the endpoint is intentionally public.
 2. **VNet Data Gateway first** for Azure private-endpoint patterns.
-3. **OPDG first** for on-premises, other-cloud private routing, and driver- or DSN-dependent workloads.
-4. **OneLake shortcuts first** for cloud object storage when the goal is lake-centric consumption instead of connector-based refresh.
+3. **VNet Data Gateway is also feasible for selected AWS and GCP connectors** when those sources are routed through Azure networking and the workload is supported.
+4. **OPDG first** for on-premises, driver- or DSN-dependent workloads, shortcut/on-prem bridging, and any source outside the VNet GW support envelope.
+5. **OneLake shortcuts first** for cloud object storage when the goal is lake-centric consumption instead of connector-based refresh.
 
 The result is not "one gateway model for everything." It is a **provider-aware model** that uses the lightest viable path for each source type.
 
@@ -38,9 +39,9 @@ The result is not "one gateway model for everything." It is a **provider-aware m
 
 | Provider / Pattern | Typical direct path | Typical private path | Default recommendation |
 |---|---|---|---|
-| AWS analytics | Redshift connector, Databricks connector | OPDG over VPN/peering | Direct for public endpoints, OPDG for private |
+| AWS analytics | Redshift connector, Databricks connector | VNet GW or OPDG over VPN/peering | Direct for public endpoints; VNet GW feasible for supported connectors; OPDG for heavier private/runtime needs |
 | AWS storage | S3 shortcut or S3 connector | OPDG only when VPC/network restriction exists | Direct or shortcut first |
-| GCP analytics | BigQuery connector, PostgreSQL connector to Cloud SQL public IP | OPDG over VPN to Cloud SQL private IP | Direct for BigQuery, mixed for Cloud SQL |
+| GCP analytics | BigQuery connector, PostgreSQL connector to Cloud SQL public IP | VNet GW or OPDG over VPN to Cloud SQL private IP | Direct for BigQuery; VNet GW feasible for supported connectors; mixed for Cloud SQL |
 | GCP storage | GCS shortcut | OPDG only when shortcut path is network-restricted | Shortcut first |
 | Azure private PaaS | Native connector | VNet Data Gateway | VNet GW first |
 | Azure storage | Native connector or shortcut | VNet GW or OPDG for firewall edge cases | Direct or shortcut first |
@@ -60,6 +61,7 @@ The result is not "one gateway model for everything." It is a **provider-aware m
 - The source is an **Azure private endpoint** service.
 - The workload is supported by VNet Data Gateway.
 - You want Azure-native private connectivity without managing gateway VMs.
+- The source is a **supported AWS or GCP connector** and Azure networking provides the route through VPN or ExpressRoute.
 
 ### Use no gateway when
 
