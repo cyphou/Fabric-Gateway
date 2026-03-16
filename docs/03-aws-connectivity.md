@@ -19,7 +19,7 @@
 </p>
 
 > **Version**: 1.0  
-> **Date**: 2026-03-12  
+> **Date**: 2026-03-16  
 > **Companion to**: [01-gateway-strategy.md](./01-gateway-strategy.md) | [02-gateway-architecture.md](./02-gateway-architecture.md)  
 > **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **AWS S3**, **AWS Databricks (Databricks on AWS)**, **AWS Redshift**, and **AWS SageMaker Unified Studio** — covering network topology, identity / authentication models, and Fabric connector mapping.  
 
@@ -36,6 +36,22 @@
 
 > [!TIP]
 > This document is the operational answer key for AWS connectivity decisions. Use it when the strategy says "AWS" and you need the exact connector, gateway, identity, and network path.
+
+## Executive Summary
+
+This document separates AWS connectivity into two broad patterns:
+
+1. **Native cloud connectivity** for public endpoints where Fabric or Power BI has a supported connector.
+2. **Gateway-mediated connectivity** for private endpoints, VPC-only access, or services that still depend on ODBC / DSN-based runtime execution.
+
+In practice, the current guidance is:
+
+- **S3**: usually direct, especially for Shortcuts and public connector paths; use OPDG only for VPC endpoint or on-prem shortcut scenarios.
+- **Redshift**: direct for public endpoints; OPDG for private VPC deployments.
+- **Databricks on AWS**: direct for public SQL Warehouse endpoints; OPDG for Private Link or other private workspace patterns.
+- **SageMaker Unified Studio**: no native Power Query connector; use Athena via OPDG or direct S3-based access depending on the use case.
+
+The rest of the document provides the implementation detail behind those four rules: connectors, identity models, network topology, security controls, and end-to-end flow patterns.
 
 ## 1. Connectivity Summary Matrix
 
