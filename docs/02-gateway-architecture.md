@@ -1,4 +1,22 @@
-# Data Gateway Architecture — Technical Design
+<p align="center">
+    <img src="https://img.shields.io/badge/Document-Architecture-1155CC?style=flat-square" alt="Architecture"/>
+    <img src="https://img.shields.io/badge/Pattern-Hub%20and%20Spoke-0F766E?style=flat-square" alt="Pattern"/>
+    <img src="https://img.shields.io/badge/Scope-HA%20%7C%20Network%20%7C%20Operations-F2C811?style=flat-square&logoColor=000000" alt="Scope"/>
+</p>
+
+<h1 align="center">Data Gateway Architecture</h1>
+
+<p align="center">
+    <strong>Technical target architecture for regional gateway clusters, network patterns, workload isolation, and operational hardening across Fabric and Power BI.</strong>
+</p>
+
+<p align="center">
+    <a href="#1-architecture-overview">Overview</a> •
+    <a href="#21-on-premises-data-gateway-opdg-cluster-design">OPDG Design</a> •
+    <a href="#22-vnet-data-gateway-design">VNet Gateway</a> •
+    <a href="#3-network-architecture">Network</a> •
+    <a href="#7-high-availability-and-disaster-recovery">HA and DR</a>
+</p>
 
 > **Version**: 1.1  
 > **Date**: 2026-03-12  
@@ -6,6 +24,19 @@
 > **Scope**: Multi-region, multi-cloud On-premises Data Gateway & VNet Data Gateway deployment for Fabric + Power BI  
 
 ---
+
+## Architecture At A Glance
+
+| Topic | Summary |
+|---|---|
+| Regional model | Hub-and-spoke gateway tiers aligned to Fabric capacity regions |
+| Runtime split | Separate gateway clusters for analytics vs data integration workloads |
+| Multi-cloud pattern | Native cloud connectors where supported; OPDG for private or driver-based access |
+| High availability | Active-active OPDG clusters with at least 2 nodes, 3 recommended for production |
+| Operational posture | Standardized VM sizing, driver stack, monitoring, patching, and recovery key management |
+
+> [!TIP]
+> Use this document when you already know the strategic direction and need the concrete target design: clusters, nodes, networking, firewall flows, HA, and operations.
 
 ## 1. Architecture Overview
 

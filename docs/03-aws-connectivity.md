@@ -1,4 +1,22 @@
-# AWS Data Source Connectivity — Network & Identity Reference
+<p align="center">
+  <img src="https://img.shields.io/badge/Document-AWS%20Connectivity-1155CC?style=flat-square" alt="AWS Connectivity"/>
+  <img src="https://img.shields.io/badge/Services-S3%20%7C%20Redshift%20%7C%20Databricks%20%7C%20SageMaker-0F766E?style=flat-square" alt="AWS Services"/>
+  <img src="https://img.shields.io/badge/Focus-Network%20%7C%20Identity%20%7C%20Connector%20Behavior-F2C811?style=flat-square&logoColor=000000" alt="Focus"/>
+</p>
+
+<h1 align="center">AWS Data Source Connectivity</h1>
+
+<p align="center">
+  <strong>Connector-by-connector guidance for deciding when Fabric and Power BI can connect directly to AWS and when a gateway, VPN, or driver-based path is still required.</strong>
+</p>
+
+<p align="center">
+  <a href="#1-connectivity-summary-matrix">Summary Matrix</a> •
+  <a href="#2-network-architecture">Network</a> •
+  <a href="#3-identity--authentication--deep-dive-per-service">Identity</a> •
+  <a href="#4-end-to-end-flow-by-fabric-feature">Flows</a> •
+  <a href="#5-security-hardening-checklist">Security</a>
+</p>
 
 > **Version**: 1.0  
 > **Date**: 2026-03-12  
@@ -6,6 +24,18 @@
 > **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **AWS S3**, **AWS Databricks (Databricks on AWS)**, **AWS Redshift**, and **AWS SageMaker Unified Studio** — covering network topology, identity / authentication models, and Fabric connector mapping.  
 
 ---
+
+## AWS Quick Answers
+
+| Service | Public endpoint supported without gateway? | Private path usually needs OPDG? | Best starting point |
+|---|---|---|---|
+| S3 | Yes | Only for VPC endpoint or on-prem shortcut scenarios | Shortcut or native S3 connector |
+| Redshift | Yes | Yes | Native Redshift connector for public endpoints |
+| Databricks on AWS | Yes | Yes | Native Databricks connector for public SQL Warehouse |
+| SageMaker Unified Studio | No native connector | Yes for Athena ODBC path | Athena via OPDG or direct S3-based access |
+
+> [!TIP]
+> This document is the operational answer key for AWS connectivity decisions. Use it when the strategy says "AWS" and you need the exact connector, gateway, identity, and network path.
 
 ## 1. Connectivity Summary Matrix
 
@@ -57,7 +87,7 @@ Is the AWS resource publicly accessible?
     └── Option C: AWS PrivateLink (service-specific, limited use)
 ```
 
-### 2.2 Network Topology — All Three Services
+### 2.2 Network Topology — Core AWS Services
 
 ```mermaid
 graph TB

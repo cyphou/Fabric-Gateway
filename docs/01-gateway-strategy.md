@@ -1,4 +1,22 @@
-# Data Gateway Strategy for Microsoft Fabric & Power BI
+<p align="center">
+     <img src="https://img.shields.io/badge/Document-Strategy-1155CC?style=flat-square" alt="Strategy"/>
+     <img src="https://img.shields.io/badge/Regions-North%20Europe%20%7C%20East%20US%20%7C%20France%20Central-0F766E?style=flat-square" alt="Regions"/>
+     <img src="https://img.shields.io/badge/Focus-Governance%20%7C%20Selection%20%7C%20Operations-F2C811?style=flat-square&logoColor=000000" alt="Focus"/>
+</p>
+
+<h1 align="center">Data Gateway Strategy for Microsoft Fabric and Power BI</h1>
+
+<p align="center">
+     <strong>Enterprise decision framework for choosing the right gateway model, operating it consistently, and governing hybrid and multi-cloud connectivity at scale.</strong>
+</p>
+
+<p align="center">
+     <a href="#1-executive-summary">Executive Summary</a> •
+     <a href="#2-gateway-types--when-to-use-what">Gateway Types</a> •
+     <a href="#3-strategic-principles">Principles</a> •
+     <a href="#4-regional-deployment-strategy">Regional Design</a> •
+     <a href="#5-governance-framework">Governance</a>
+</p>
 
 > **Version**: 1.1  
 > **Date**: 2026-03-12  
@@ -6,6 +24,19 @@
 > **Scope**: Enterprise-wide gateway strategy across North Europe, East US, and France Central — including multi-cloud data sources (AWS, GCP, other providers)  
 
 ---
+
+## Strategy At A Glance
+
+| Topic | Summary |
+|---|---|
+| Primary decision | Use the lightest viable connectivity model: native cloud connector first, OPDG when privacy, drivers, or workload limitations require it |
+| Standard model | Centralized IT owns shared gateway infrastructure; business teams consume managed connections |
+| Azure-native private sources | Prefer VNet Data Gateway |
+| On-premises and private multi-cloud sources | Use OPDG in Azure-hosted HA clusters |
+| Main design goal | Reduce gateway sprawl while keeping performance, security, and operational ownership predictable |
+
+> [!TIP]
+> Read this document first if you need policy, ownership, selection rules, or a standard enterprise position before moving into implementation details.
 
 ## 1. Executive Summary
 
