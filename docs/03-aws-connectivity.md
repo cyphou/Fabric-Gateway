@@ -449,11 +449,11 @@ graph LR
 
     %% Path 2: S3 direct
     FAB_SM -->|Shortcut or Pipeline| CONN_S3B
-    CONN_S3B -->|HTTPS (IAM Key)| S3_SM
+    CONN_S3B -->|HTTPS IAM key| S3_SM
 
     %% Path 3: Notebook
-    NB_SM -->|pyathena / boto3| ATH
-    NB_SM -->|boto3 / s3a://| S3_SM
+    NB_SM -->|Python Athena client| ATH
+    NB_SM -->|Python S3 client| S3_SM
 
     SM_LH --- GLUE
     SM_LH --- S3_SM
