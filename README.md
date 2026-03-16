@@ -53,9 +53,11 @@ flowchart LR
 1. Read [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) for the operating model and gateway selection rules.
 2. Read [docs/02-gateway-architecture.md](docs/02-gateway-architecture.md) for the regional design, clusters, network patterns, and component layout.
 3. Read [docs/03-aws-connectivity.md](docs/03-aws-connectivity.md) for the AWS deep dive covering S3, Redshift, Databricks on AWS, and SageMaker Unified Studio.
+4. Read [docs/04-gcp-connectivity.md](docs/04-gcp-connectivity.md) for the GCP deep dive covering BigQuery, Cloud SQL, and Google Cloud Storage.
+5. Read [docs/05-azure-connectivity.md](docs/05-azure-connectivity.md) for the Azure deep dive covering Azure SQL, Azure PostgreSQL, ADLS Gen2, and Blob Storage.
 
 > [!TIP]
-> If your immediate question is "Do I need a gateway for this source?", start with [docs/03-aws-connectivity.md](docs/03-aws-connectivity.md) for AWS and [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) for the general rule set.
+> If your immediate question is "Do I need a gateway for this source?", start with the cloud-specific deep dive for your provider and then fall back to [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) for the general rule set.
 
 ## What This Repo Covers
 
@@ -144,6 +146,8 @@ Other cloud or SaaS
 | [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) | Governance, gateway type selection, ownership, security, capacity planning | You need policy, standards, and the decision framework |
 | [docs/02-gateway-architecture.md](docs/02-gateway-architecture.md) | Regional layout, gateway clusters, VM sizing, firewall and network design, HA/DR | You need the technical target architecture |
 | [docs/03-aws-connectivity.md](docs/03-aws-connectivity.md) | AWS-specific connector behavior, identity models, network options, security hardening | You need AWS implementation guidance |
+| [docs/04-gcp-connectivity.md](docs/04-gcp-connectivity.md) | GCP-specific connector behavior, shortcut patterns, private access options, security hardening | You need GCP implementation guidance |
+| [docs/05-azure-connectivity.md](docs/05-azure-connectivity.md) | Azure-native connector behavior, VNet gateway guidance, storage shortcut patterns, security hardening | You need Azure implementation guidance |
 | [tasks/todo.md](tasks/todo.md) | Lightweight project tracking for this documentation set | You want the current status of the document pack |
 
 ---
@@ -187,7 +191,9 @@ FabricGateway/
 ├── docs/
 │   ├── 01-gateway-strategy.md
 │   ├── 02-gateway-architecture.md
-│   └── 03-aws-connectivity.md
+│   ├── 03-aws-connectivity.md
+│   ├── 04-gcp-connectivity.md
+│   └── 05-azure-connectivity.md
 └── tasks/
     └── todo.md
 ```
