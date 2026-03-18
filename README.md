@@ -100,6 +100,7 @@ flowchart LR
 7. Read [docs/10-cross-cloud-streaming-comparison.md](docs/10-cross-cloud-streaming-comparison.md) for the cross-cloud streaming decision guide across Azure, AWS, GCP, and Kafka ecosystems.
 8. Read [docs/06-cross-cloud-comparison.md](docs/06-cross-cloud-comparison.md) for the single-page decision grid across AWS, GCP, Azure, and SaaS.
 9. Read [docs/07-snowflake-connectivity.md](docs/07-snowflake-connectivity.md) and [docs/08-databricks-connectivity.md](docs/08-databricks-connectivity.md) for SaaS analytics deep dives.
+10. Read [docs/11-gateway-optimization.md](docs/11-gateway-optimization.md) for gateway performance tuning, scaling strategies, and workload optimization.
 
 > [!TIP]
 > If your immediate question is "Do I need a gateway for this source?", start with the cloud-specific deep dive for your provider and then fall back to [docs/01-gateway-strategy.md](docs/01-gateway-strategy.md) for the general rule set.
@@ -198,6 +199,7 @@ Other cloud or SaaS
 | [docs/06-cross-cloud-comparison.md](docs/06-cross-cloud-comparison.md) | Fast comparison of decision rules across providers and source types | You want the shortest route to the right gateway pattern |
 | [docs/07-snowflake-connectivity.md](docs/07-snowflake-connectivity.md) | Snowflake-specific connector behavior, Entra ID SSO, and operational caveats | You need Snowflake implementation guidance |
 | [docs/08-databricks-connectivity.md](docs/08-databricks-connectivity.md) | Databricks-specific connector selection across AWS, Azure, and GCP | You need Databricks implementation guidance |
+| [docs/11-gateway-optimization.md](docs/11-gateway-optimization.md) | Performance tuning, scaling strategies, query optimization, scheduling, multi-cloud source optimization | You need to improve gateway throughput, reduce refresh times, or right-size infrastructure |
 | [tasks/todo.md](tasks/todo.md) | Lightweight project tracking for this documentation set | You want the current status of the document pack |
 
 ---
@@ -248,7 +250,8 @@ FabricGateway/
 │   ├── 07-snowflake-connectivity.md
 │   ├── 08-databricks-connectivity.md
 │   ├── 09-azure-streaming-connectivity.md
-│   └── 10-cross-cloud-streaming-comparison.md
+│   ├── 10-cross-cloud-streaming-comparison.md
+│   └── 11-gateway-optimization.md
 └── tasks/
     └── todo.md
 ```

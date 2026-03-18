@@ -14,7 +14,8 @@
 - [x] Architecture design document (`docs/02-gateway-architecture.md`)
 - [x] Architecture diagrams (Mermaid — embedded in architecture doc)
 - [x] Review section
+- [x] Gateway optimization guide (`docs/11-gateway-optimization.md`)
 
 ## Status
 - **Started**: 2026-03-12
-- **Last Updated**: 2026-03-16
+- **Last Updated**: 2026-03-18
