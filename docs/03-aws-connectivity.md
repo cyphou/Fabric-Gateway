@@ -18,8 +18,8 @@
   <a href="#5-security-hardening-checklist">Security</a>
 </p>
 
-> **Version**: 1.0  
-> **Date**: 2026-03-16  
+> **Version**: 1.1  
+> **Date**: 2026-04-03  
 > **Companion to**: [01-gateway-strategy.md](./01-gateway-strategy.md) | [02-gateway-architecture.md](./02-gateway-architecture.md)  
 > **Scope**: All connectivity paths from Microsoft Fabric / Power BI to **AWS S3**, **AWS Databricks (Databricks on AWS)**, **AWS Redshift**, and **AWS SageMaker Unified Studio** — covering network topology, identity / authentication models, and Fabric connector mapping.  
 
@@ -29,13 +29,13 @@
 
 | Service | Public endpoint supported without gateway? | Is OPDG still an option? | Best starting point |
 |---|---|---|---|
-| S3 | Yes | Only for VPC endpoint or on-prem shortcut scenarios | Shortcut or native S3 connector |
+| S3 | Yes | OPDG required for VPC Shortcuts; VNet GW or OPDG for Pipeline/SM in VPC | Shortcut (public) or VNet GW Pipeline (VPC) |
 | Redshift | Yes | Yes, but it is not mandatory | Native Redshift connector for public endpoints |
 | Databricks on AWS | Yes | Yes | Native Databricks connector for public SQL Warehouse |
 | SageMaker Unified Studio | No native connector | Yes for Athena ODBC path | Athena via OPDG or direct S3-based access |
 
 > [!NOTE]
-> For supported connector-based workloads, **VNet Data Gateway is also feasible for some AWS sources** when the route is provided through Azure networking such as VPN or ExpressRoute. In practice this is relevant for connector paths such as **Amazon Redshift**, **Amazon S3**, and **Databricks**. It does **not** replace shortcut-native patterns or ODBC-heavy SageMaker / Athena scenarios, where OPDG remains the clearer design.
+> For supported connector-based workloads, **VNet Data Gateway is officially supported for Amazon S3** (Pipeline Copy Activity, Copy Job, Semantic Model, Paginated Reports) when the route is provided through Azure networking such as VPN or ExpressRoute. **OneLake Shortcuts** to VPC-protected S3 still require **OPDG**. The S3 connector does **not** support Dataflow Gen2.
 
 > [!TIP]
 > This document is the operational answer key for AWS connectivity decisions. Use it when the strategy says "AWS" and you need the exact connector, gateway, identity, and network path.
@@ -49,7 +49,8 @@ This document separates AWS connectivity into two broad patterns:
 
 In practice, the current guidance is:
 
-- **S3**: usually direct, especially for Shortcuts and public connector paths; use OPDG only for VPC endpoint or on-prem shortcut scenarios.
+- **S3 (public)**: direct Shortcut or connector for all supported workloads; no gateway needed.
+- **S3 (VPC-protected)**: **VNet Data Gateway** for Pipeline, Copy Job, Semantic Model, and Paginated Reports; **OPDG** is mandatory for OneLake Shortcuts; Notebooks use Fabric Managed VNet; **Dataflow Gen2 is not supported** by the S3 connector (stage data via Pipeline or Shortcut first). Prefer **Entra ID Service Principal** (OIDC) over IAM Access Keys for Shortcut authentication.
 - **Redshift**: direct is the default pattern; OPDG remains optional when you deliberately choose a private-routing or driver-based path.
 - **Databricks on AWS**: direct for public SQL Warehouse endpoints; OPDG for Private Link or other private workspace patterns.
 - **SageMaker Unified Studio**: no native Power Query connector; use Athena via OPDG or direct S3-based access depending on the use case.
@@ -60,10 +61,13 @@ The rest of the document provides the implementation detail behind those four ru
 
 | AWS Service | Fabric Feature | Connector / Method | Gateway Required? | Network Path | Identity Model |
 |---|---|---|---|---|---|
-| **S3** | OneLake Shortcut | Shortcut → S3 | No | Public HTTPS | IAM Access Key *or* IAM Role (cross-account) |
-| **S3** | Fabric Pipeline (Copy Activity) | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key (stored in Fabric connection) |
-| **S3** | Dataflow Gen2 | Amazon S3 connector | No (cloud) / OPDG (VPC endpoint) | Public HTTPS or S2S VPN | IAM Access Key |
-| **S3** | Notebook (Spark) | `boto3` / `s3a://` protocol | No | Public HTTPS | IAM Access Key or STS Assume-Role (env vars / Fabric secret) |
+| **S3** | OneLake Shortcut | Shortcut → S3 | No (public) / OPDG (VPC / firewall) | Public HTTPS or OPDG-bridged | IAM Access Key, IAM Role (cross-account), *or* **Entra ID Service Principal** (OIDC federation) |
+| **S3** | Fabric Pipeline (Copy Activity) | Amazon S3 connector | No (public) / **VNet Data GW** / OPDG | Public HTTPS, VNet GW routed, or S2S VPN | IAM Access Key (stored in Fabric connection) |
+| **S3** | Fabric Copy Job | Amazon S3 connector | No (public) / **VNet Data GW** / OPDG | Public HTTPS, VNet GW routed, or S2S VPN | IAM Access Key (stored in Fabric connection) |
+| **S3** | Semantic Model (Import) | Amazon S3 connector (Power Query) | **VNet Data GW** / OPDG | VNet GW routed or S2S VPN | IAM Access Key |
+| **S3** | Paginated Reports | Amazon S3 connector (Power Query) | **VNet Data GW** / OPDG | VNet GW routed or S2S VPN | IAM Access Key |
+| ~~**S3**~~ | ~~Dataflow Gen2~~ | ~~Amazon S3 connector~~ | — | — | **Not supported** — the S3 connector does not support Dataflow Gen2 (use Pipeline Copy Activity or S3 Shortcut instead) |
+| **S3** | Notebook (Spark) | `boto3` / `s3a://` protocol | No (uses Fabric Managed VNet for VPC scenarios) | Public HTTPS or Managed VNet outbound | IAM Access Key or STS Assume-Role (env vars / Fabric secret) |
 | **Redshift** | Semantic Model (Import) | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
 | **Redshift** | Semantic Model (DirectQuery) | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account (Entra ID SSO) |
 | **Redshift** | Dataflow Gen2 | Amazon Redshift connector | No; OPDG optional for private-routing patterns | Public + TLS by default; optional S2S VPN / OPDG path | Redshift DB credentials, Microsoft account, Organizational account |
@@ -82,20 +86,36 @@ The rest of the document provides the implementation detail behind those four ru
 
 ### 1.1 Where VNet Data Gateway Fits for AWS
 
-VNet Data Gateway is not the default AWS recommendation, but it is a **feasible option** for supported connector-based workloads because Microsoft documents VNet GW support for sources such as **Amazon Redshift**, **Amazon S3**, and **Databricks**, including scenarios where the source is reached through public endpoints or through Azure networking with VPN / ExpressRoute.
+VNet Data Gateway is not the default AWS recommendation, but it is a **feasible and officially supported option** for several AWS sources when the route is provided through Azure networking. Microsoft explicitly lists **Amazon S3**, **Amazon Redshift**, and **Databricks** in the VNet Data Gateway supported data sources for Power BI semantic models, and the Fabric S3 connector supports VNet Data Gateway for **Pipeline Copy Activity** and **Copy Job** workloads.
 
-Use it when:
+#### S3-Specific VNet Data Gateway Support
 
-- the workload is inside the VNet GW support envelope, and
+| Fabric Workload | VNet Data GW supported for S3? | Notes |
+|---|---|---|
+| **Pipeline (Copy Activity)** | **Yes** | Confirmed in Fabric S3 connector overview (gateway type: Virtual network) |
+| **Copy Job** | **Yes** | Confirmed in Fabric S3 connector overview (gateway type: Virtual network) |
+| **Semantic Model (Import/DQ)** | **Yes** | S3 listed in VNet GW supported data sources for Power BI |
+| **Paginated Reports** | **Yes** | S3 listed in VNet GW supported data sources for Power BI |
+| **OneLake Shortcut** | **No** | Shortcuts to VPC-protected S3 require **OPDG** (not VNet GW) |
+| **Dataflow Gen2** | **No** | The S3 connector does not support Dataflow Gen2 at all |
+| **Notebook (Spark)** | **N/A** | Notebooks use `boto3` directly; use Fabric **Managed VNet** for VPC isolation |
+| **Mirroring** | **N/A** | S3 is not a mirroring target |
+
+> [!IMPORTANT]
+> **Fabric Managed Private Endpoints do NOT support Amazon S3.** Managed Private Endpoints (used with Fabric Managed VNets for Spark workloads) only support Azure data sources — they cannot create a private endpoint to an AWS resource. For Notebook access to VPC-protected S3, use Fabric Managed VNets with outbound rules, or bridge through an **Azure Private Link Service** connected to AWS via VPN/Direct Connect.
+
+Use VNet Data Gateway for S3 when:
+
+- the workload is **Pipeline, Copy Job, Semantic Model, or Paginated Reports**, and
 - you want Azure-managed gateway compute instead of Windows gateway VMs, and
-- the AWS source is reachable from Azure networking.
+- the S3 bucket is reachable from Azure networking (VPN, ExpressRoute, or public with IP restriction).
 
-Keep **OPDG** as the preferred choice when you need:
+Keep **OPDG** as the required choice when:
 
-- driver or DSN installation,
-- shortcut-to-on-prem bridging,
-- SageMaker / Athena ODBC patterns, or
-- workloads not supported by VNet GW.
+- the workload is **OneLake Shortcut** to a VPC-protected S3 bucket,
+- you need driver or DSN installation,
+- shortcut-to-on-prem bridging is required, or
+- workloads are not supported by VNet GW.
 
 ---
 
@@ -255,9 +275,26 @@ graph LR
 
 | Method | How it works | Pros | Cons | Recommended for |
 |---|---|---|---|---|
-| **IAM Access Key** (Key ID + Secret) | Static long-lived credentials stored in Fabric connection | Simple setup; works with all Fabric connectors | Keys don't expire unless rotated; risk of leakage | OneLake Shortcut, Pipeline, Dataflow — when STS is not supported |
+| **IAM Access Key** (Key ID + Secret) | Static long-lived credentials stored in Fabric connection | Simple setup; works with all Fabric connectors | Keys don't expire unless rotated; risk of leakage | OneLake Shortcut, Pipeline, Copy Job, Semantic Model — when STS or Entra SP is not supported |
 | **IAM Role (STS AssumeRole)** | Fabric or gateway calls `sts:AssumeRole` to get temporary creds | Short-lived tokens (1-12 hrs); no static secret stored | Requires trust policy on AWS side; not all Fabric connectors support it | Notebooks (via `boto3`); Pipeline if using custom activity |
-| **S3 Bucket Policy (IP-based)** | Bucket policy restricts `s3:*` to specific source IPs + IAM principal | Defence-in-depth; limits blast radius | Must maintain IP list; doesn't replace authentication | Combined with IAM key — always add as secondary control |
+| **Entra ID Service Principal (OIDC)** | Fabric Shortcut uses Entra SP + OIDC federation → AWS `sts:AssumeRoleWithWebIdentity` → temporary S3 credentials | No AWS IAM keys stored; uses Entra identity; OIDC tokens are short-lived; full CloudTrail audit support | Requires OIDC provider + IAM role trust policy on AWS side; currently only supported for S3 **Shortcuts** | **OneLake Shortcuts** — recommended for enterprise environments; eliminates static credential management |
+| **S3 Bucket Policy (IP-based)** | Bucket policy restricts `s3:*` to specific source IPs + IAM principal | Defence-in-depth; limits blast radius | Must maintain IP list; doesn't replace authentication | Combined with IAM key or Entra SP — always add as secondary control |
+
+> [!TIP]
+> **Entra ID Service Principal** is the recommended authentication method for S3 Shortcuts in production. It uses OIDC federation between Microsoft Entra ID and AWS IAM, eliminating the need to manage static AWS access keys. For VPC-protected S3, combine Entra SP auth with an OPDG to bridge the network. See [Integrate Microsoft Entra with AWS S3 shortcuts](https://learn.microsoft.com/en-us/fabric/onelake/amazon-storage-shortcut-entra-integration) for setup instructions.
+
+#### Entra ID Service Principal — Setup Summary
+
+| Step | Detail |
+|---|---|
+| 1. Register Entra App | Azure Portal → Entra ID → App registrations → New registration |
+| 2. Create Client Secret | Entra App → Certificates & secrets → New client secret |
+| 3. Get App Details | Copy Application ID, Object ID (from Enterprise applications), and Tenant ID |
+| 4. Create AWS OIDC Provider | AWS IAM → Identity providers → OpenID Connect; Provider URL: `https://sts.windows.net/<tenant-id>/`; Audience: `https://analysis.windows.net/powerbi/connector/AmazonS3` |
+| 5. Create AWS IAM Role | Trusted entity: Web identity → OIDC provider; Condition: `:sub` = Entra SP Object ID; Assign S3 read policies |
+| 6. Create Fabric Connection | OneLake Shortcut → Amazon S3 → Auth: Service Principal; provide Tenant ID, Client ID, Client Secret, and RoleARN |
+
+> For VPC-protected S3 buckets, also select an **OPDG** in the Data gateway dropdown during shortcut creation. See [Create shortcuts to on-premises data](https://learn.microsoft.com/en-us/fabric/onelake/create-on-premises-shortcut).
 
 #### IAM Policy — Minimum Permissions
 
@@ -699,6 +736,118 @@ sequenceDiagram
 
 ---
 
+## 4.4 S3 in VPC — Comprehensive Workload Coverage
+
+When an S3 bucket is inside a VPC (VPC endpoint / firewall / no public access), every Fabric workload requires a specific connectivity approach. This section provides the definitive guide for **all Fabric workloads** accessing VPC-protected S3.
+
+### 4.4.1 S3 VPC Connectivity — Decision Tree
+
+```
+S3 bucket is VPC-protected (no public endpoint)
+│
+├── Is the Fabric workload an OneLake Shortcut?
+│   └── YES → OPDG is REQUIRED
+│             ├── Auth: Entra ID Service Principal (OIDC) → recommended
+│             └── Auth: IAM Access Key → acceptable
+│
+├── Is the workload a Pipeline Copy Activity or Copy Job?
+│   ├── VNet Data Gateway → PREFERRED (managed compute, no VM)
+│   │   └── Requires: S3 reachable from Azure VNet (VPN / ExpressRoute)
+│   └── OPDG → ALTERNATIVE (full control, driver installation)
+│       └── Requires: S2S VPN or ExpressRoute to AWS VPC
+│
+├── Is the workload a Power BI Semantic Model or Paginated Report?
+│   ├── VNet Data Gateway → PREFERRED
+│   │   └── S3 listed in VNet GW supported data sources
+│   └── OPDG → ALTERNATIVE
+│
+├── Is the workload a Fabric Notebook (Spark)?
+│   └── Use Fabric Managed VNet
+│       ├── Managed VNet provides Spark network isolation
+│       ├── ⚠ Managed Private Endpoints do NOT support AWS S3
+│       └── Bridge options:
+│           ├── A: Managed PE → Azure Private Link Service → VPN/ER → AWS VPC
+│           └── B: Outbound via Managed VNet to S3 public endpoint (if available)
+│
+├── Is the workload a Dataflow Gen2?
+│   └── NOT SUPPORTED — S3 connector has no Dataflow Gen2 support
+│       └── Workaround: Use Pipeline Copy Activity to stage data in Lakehouse,
+│           then consume from Dataflow Gen2
+│
+└── Is the workload Mirroring?
+    └── NOT APPLICABLE — S3 is not a database mirror source
+```
+
+### 4.4.2 S3 VPC — Architecture Diagram
+
+```mermaid
+graph TB
+    subgraph "Microsoft Fabric"
+        SC["OneLake\nShortcut"]
+        PIPE["Pipeline\nCopy Activity"]
+        CJ["Copy Job"]
+        SM["Semantic Model\n(Import/DQ)"]
+        PR["Paginated\nReport"]
+        NB["Notebook\n(Spark)"]
+    end
+
+    subgraph "Azure Networking"
+        VNETGW["VNet Data\nGateway"]
+        OPDG["OPDG Cluster\n(3 nodes)"]
+        VPNGW["Azure VPN GW"]
+        MVNET["Fabric Managed\nVNet"]
+        PLS["Azure Private\nLink Service\n(optional bridge)"]
+    end
+
+    subgraph "AWS VPC"
+        S3_VPC["S3 Bucket\n(VPC Endpoint)"]
+        VPCE["S3 VPC\nEndpoint\n(Gateway type)"]
+        VGW["AWS Virtual\nPrivate Gateway"]
+    end
+
+    %% Shortcut → OPDG only
+    SC -->|OPDG required| OPDG
+    OPDG -->|S2S VPN / ER| VPNGW
+    VPNGW <-->|IPsec tunnel| VGW
+    VGW --> VPCE
+    VPCE --> S3_VPC
+
+    %% Pipeline / Copy Job → VNet GW or OPDG
+    PIPE -->|VNet GW preferred| VNETGW
+    CJ -->|VNet GW preferred| VNETGW
+    VNETGW -->|via Azure VNet\nVPN/ER route| VPNGW
+
+    %% Semantic Model / Paginated → VNet GW or OPDG
+    SM -->|VNet GW preferred| VNETGW
+    PR -->|VNet GW preferred| VNETGW
+
+    %% Notebook → Managed VNet
+    NB -->|Managed VNet| MVNET
+    MVNET -.->|Managed PE → PLS bridge| PLS
+    PLS -.->|VPN/ER route| VPNGW
+```
+
+### 4.4.3 S3 VPC — Per-Workload Reference
+
+| Fabric Workload | Gateway Type | Auth Options | Network Path | Key Consideration |
+|---|---|---|---|---|
+| **OneLake Shortcut** | **OPDG** (mandatory for VPC S3) | Entra SP (OIDC), IAM Access Key | OPDG → VPN/ER → AWS VPC Endpoint → S3 | Only gateway option for shortcuts; supports file caching to reduce egress |
+| **Pipeline Copy Activity** | **VNet Data GW** (preferred) or OPDG | IAM Access Key | VNet GW → VPN/ER → AWS VPC → S3 | VNet GW avoids VM management; supports source + destination |
+| **Copy Job** | **VNet Data GW** (preferred) or OPDG | IAM Access Key | VNet GW → VPN/ER → AWS VPC → S3 | Supports full load, incremental, append, override modes |
+| **Semantic Model** | **VNet Data GW** (preferred) or OPDG | IAM Access Key | VNet GW → VPN/ER → AWS VPC → S3 | Import and DirectQuery; S3 in VNet GW supported sources list |
+| **Paginated Reports** | **VNet Data GW** (preferred) or OPDG | IAM Access Key | VNet GW → VPN/ER → AWS VPC → S3 | VNet GW now supports paginated reports |
+| **Notebook (Spark)** | **None** (Managed VNet) | IAM Access Key, STS AssumeRole | Managed VNet outbound or PLS bridge | Managed PEs do NOT support S3 natively; bridge via PLS if VPC-only |
+| **Dataflow Gen2** | **Not supported** | — | — | Use Pipeline → Lakehouse staging as workaround |
+| **Mirroring** | **N/A** | — | — | S3 is object storage, not a mirrorable database |
+
+> [!WARNING]
+> **Dataflow Gen2 does not support the Amazon S3 connector.** The S3 connector overview page lists support only for Pipeline (Copy Activity) and Copy Job. If your data integration pattern requires Dataflow Gen2, first land S3 data into a Lakehouse via Pipeline or Shortcut, then use Dataflow Gen2 to transform the staged data.
+
+> [!NOTE]
+> **Fabric Managed Private Endpoints** support only Azure resources (27+ sources such as Azure SQL, ADLS Gen2, Azure PostgreSQL, etc.). They **cannot** create a private endpoint directly to AWS S3. For Notebook access to VPC-only S3, you must either (a) ensure S3 has a reachable public endpoint from the Managed VNet, or (b) set up an **Azure Private Link Service** that bridges to AWS via VPN/ExpressRoute and create a Managed PE to that PLS.
+
+---
+
 ## 5. Security Hardening Checklist
 
 | # | Control | AWS S3 | Redshift | Databricks | SageMaker Unified Studio |
@@ -764,6 +913,18 @@ sequenceDiagram
 - **Context**: AWS SageMaker Unified Studio does not have a native Power Query connector. Data in SageMaker Lakehouse is stored in S3 and catalogued via AWS Glue Data Catalog, which is queryable via Amazon Athena.
 - **Decision**: Use **Amazon Athena** connector (ODBC via OPDG) for structured/SQL queries against SageMaker Lakehouse tables. Use **S3 Shortcuts** or **S3 Pipeline connector** for direct file access to the underlying S3 storage.
 - **Rationale**: Athena provides a SQL interface to the Glue Data Catalog (which SageMaker Lakehouse uses). S3 Shortcuts provide a zero-copy, gateway-free path when data is in open formats (Parquet/Delta/Iceberg). There is no benefit to waiting for a native connector when these paths cover all use cases.
+
+### ADR-06: S3 in VPC — use VNet Data Gateway for Pipeline/Semantic Model, OPDG for Shortcuts
+
+- **Context**: When S3 buckets are inside a VPC (no public endpoint), different Fabric workloads require different gateway types. VNet Data Gateway now officially supports Amazon S3 for Pipeline, Copy Job, Semantic Model, and Paginated Report workloads. However, OneLake Shortcuts to VPC-protected S3 require OPDG. Dataflow Gen2 does not support the S3 connector at all.
+- **Decision**: Use **VNet Data Gateway** as the **preferred** gateway for Pipeline Copy Activity, Copy Job, Semantic Model, and Paginated Report workloads connecting to VPC-protected S3. Use **OPDG** as the **required** gateway for OneLake Shortcuts to VPC-protected S3. Stage S3 data via Pipeline or Shortcut before consuming in Dataflow Gen2.
+- **Rationale**: VNet Data Gateway eliminates VM management overhead and is explicitly supported by Microsoft for S3. OPDG remains mandatory for Shortcuts because the OneLake Shortcut service does not support VNet Data Gateway for S3. Dataflow Gen2 is not supported by the S3 connector — staging data first avoids an unsupported path. This decision reduces infrastructure cost (fewer OPDG VMs) while ensuring every workload has a tested, supported connectivity path.
+
+### ADR-07: Prefer Entra ID Service Principal over IAM Access Keys for S3 Shortcuts
+
+- **Context**: Microsoft now supports Entra ID Service Principal authentication for S3 Shortcuts via OIDC federation with AWS IAM. This eliminates the need to manage static AWS access keys.
+- **Decision**: Use **Entra ID Service Principal** (OIDC) as the **default authentication method** for S3 Shortcuts in production. Retain IAM Access Key as a fallback for environments where OIDC federation cannot be established.
+- **Rationale**: Entra SP eliminates static credentials, provides short-lived OIDC tokens, creates a unified identity model across Azure and AWS, and enables full audit trail via AWS CloudTrail. The setup is more complex but the operational security benefits justify it for enterprise environments.
 
 ---
 

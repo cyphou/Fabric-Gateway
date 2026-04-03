@@ -17,8 +17,8 @@
   <a href="#4-architecture-preferences">Architecture Preferences</a>
 </p>
 
-> **Version**: 1.0  
-> **Date**: 2026-03-16  
+> **Version**: 1.1  
+> **Date**: 2026-04-03  
 > **Companion to**: [03-aws-connectivity.md](./03-aws-connectivity.md) | [04-gcp-connectivity.md](./04-gcp-connectivity.md) | [05-azure-connectivity.md](./05-azure-connectivity.md) | [07-snowflake-connectivity.md](./07-snowflake-connectivity.md) | [08-databricks-connectivity.md](./08-databricks-connectivity.md)
 
 ---
@@ -40,7 +40,8 @@ The result is not "one gateway model for everything." It is a **provider-aware m
 | Provider / Pattern | Typical direct path | Typical private path | Default recommendation |
 |---|---|---|---|
 | AWS analytics | Redshift connector, Databricks connector | VNet GW or OPDG over VPN/peering | Direct for public endpoints; VNet GW feasible for supported connectors; OPDG for heavier private/runtime needs |
-| AWS storage | S3 shortcut or S3 connector | OPDG only when VPC/network restriction exists | Direct or shortcut first |
+| AWS storage (public) | S3 shortcut or S3 connector | — | Direct or shortcut first |
+| AWS storage (VPC) | VNet GW for Pipeline/Copy Job/Semantic Model, OPDG for Shortcuts | OPDG for shortcuts; VNet GW for Pipeline/SM/Paginated | VNet GW preferred for Pipeline/SM; OPDG mandatory for Shortcuts |
 | GCP analytics | BigQuery connector, PostgreSQL connector to Cloud SQL public IP | VNet GW or OPDG over VPN to Cloud SQL private IP | Direct for BigQuery; VNet GW feasible for supported connectors; mixed for Cloud SQL |
 | GCP storage | GCS shortcut | OPDG only when shortcut path is network-restricted | Shortcut first |
 | Azure private PaaS | Native connector | VNet Data Gateway | VNet GW first |
@@ -103,6 +104,12 @@ The result is not "one gateway model for everything." It is a **provider-aware m
 
 | Question | Best answer |
 |---|---|
+| Public S3? | OneLake shortcut or direct connector |
+| S3 in VPC — Shortcut? | **OPDG** (mandatory); prefer Entra SP auth |
+| S3 in VPC — Pipeline/Copy Job? | **VNet Data GW** (preferred) or OPDG |
+| S3 in VPC — Semantic Model? | **VNet Data GW** (preferred) or OPDG |
+| S3 in VPC — Dataflow Gen2? | **Not supported** — stage via Pipeline/Shortcut first |
+| S3 in VPC — Notebook? | Fabric Managed VNet (no gateway); Managed PEs do NOT support S3 |
 | Public Redshift? | Direct connector |
 | Private Redshift? | OPDG |
 | BigQuery? | Direct connector |
