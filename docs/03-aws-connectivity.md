@@ -135,12 +135,18 @@ Is the AWS resource publicly accessible?
 │             ► Whitelist Fabric service IPs or use    │
 │               Fabric Trusted Service                 │
 │                                                      │
+├── YES, but only IP whitelisting (no VPN) ───────────┐
+│   ► See Option E — NOT RECOMMENDED for production   │
+│   ► Acceptable for dev/test or temporary bridge     │
+│                                                      │
 └── NO (Private VPC only) ────────────────────────────┘
     OPDG is ALWAYS required.
     Choose connectivity method:
     ├── Option A: Site-to-Site VPN (Azure VPN GW ↔ AWS VGW)
     ├── Option B: ExpressRoute + Partner Peering ↔ AWS Direct Connect
-    └── Option C: AWS PrivateLink (service-specific, limited use)
+    ├── Option C: AWS PrivateLink (service-specific, limited use)
+    ├── Option D: S3 Landing Zone (export → S3 → Fabric) — NOT RECOMMENDED
+    └── Option E: IP Whitelisting only — NOT RECOMMENDED for production
 ```
 
 ### 2.2 Network Topology — Core AWS Services
@@ -244,6 +250,76 @@ graph TB
 | **Latency** | Variable (20-80 ms typical) |
 
 **When to use**: S3 buckets that are already public/semi-public, Databricks workspaces with public networking, Redshift Serverless with public endpoints, or when VPN setup is not feasible.
+
+#### Option D — S3 Landing Zone Pattern (Export → S3 → Fabric) — Not Recommended
+
+Instead of connecting Fabric directly to an AWS data source (Redshift, RDS, SageMaker, etc.), one might export or stage data to an S3 bucket first, and then consume it from Fabric via an S3 Shortcut or S3 Pipeline connector.
+
+| Property | Value |
+|---|---|
+| **Pattern** | AWS data source → scheduled export/UNLOAD → S3 bucket → Fabric S3 Shortcut or Pipeline |
+| **Gateway** | No gateway needed if S3 is public; OPDG / VNet Data GW if S3 is in VPC |
+| **Typical flow** | Redshift `UNLOAD TO 's3://...'` or Glue ETL job → S3 → OneLake Shortcut |
+| **Latency** | Not real-time — data freshness depends on the export schedule |
+| **Cost** | S3 storage + export compute + data egress (if cross-region) |
+
+> [!WARNING]
+> **This pattern is not recommended as a primary connectivity strategy.** While it works, it introduces significant operational and architectural downsides compared to native connectors.
+
+**Why this is not a good option:**
+
+| Concern | Detail |
+|---|---|
+| **Data staleness** | Data is only as fresh as the last export. You lose the ability to query live or near-real-time data — DirectQuery is impossible. |
+| **Data duplication** | You maintain a copy in S3 on top of the source system, increasing AWS storage and egress costs and creating a data governance liability (two copies of the same data). |
+| **Operational complexity** | You must build, schedule, monitor, and maintain the export pipeline on the AWS side (UNLOAD scripts, Glue jobs, Step Functions, etc.) in addition to the Fabric ingestion pipeline. Two pipelines to fail instead of one. |
+| **Schema drift risk** | If the source schema changes, the S3 export and the Fabric consumer can silently break or produce incorrect results unless you add schema validation on both sides. |
+| **Security surface** | An intermediate S3 bucket creates an additional storage location holding potentially sensitive data, widening the data perimeter and requiring its own security controls (encryption, access policies, lifecycle expiry). |
+| **Loss of query folding** | Native connectors (Redshift, Databricks) push query predicates and aggregations to the source engine. With an S3 landing zone, Fabric reads flat files — all filtering happens on the Fabric side, increasing data transfer and processing time. |
+
+**When it might still make sense** (edge cases):
+
+- The source system has no native Fabric connector at all (e.g., a proprietary AWS service) and S3 is the only export target.
+- You already run a centralised AWS data lake pipeline that lands curated data in S3, and you want Fabric to consume the existing output rather than create a parallel extraction.
+- Data volumes are very large (hundreds of GB) and the source cannot sustain concurrent analytical + extraction queries — offloading to S3 via a scheduled UNLOAD reduces source pressure.
+
+> [!TIP]
+> If you are already landing curated data in S3 as part of an existing AWS data platform, consuming that S3 output via an OneLake Shortcut is pragmatic. But **do not create a new S3 staging step** solely to avoid setting up VPN or OPDG — the ongoing operational cost outweighs the one-time infrastructure setup.
+
+#### Option E — IP Whitelisting Without VPN — Not Recommended for Production
+
+Instead of establishing a VPN or ExpressRoute tunnel, one might expose the AWS data source on a public endpoint and restrict access by whitelisting (allowlisting) specific IP addresses — Fabric service IPs and/or OPDG NAT gateway IPs — in the AWS Security Group, NACLs, or S3 bucket policy.
+
+| Property | Value |
+|---|---|
+| **Pattern** | AWS source stays on public endpoint → AWS SG allows only Fabric / OPDG IPs → TLS 1.2+ in transit |
+| **Gateway** | OPDG optional (for connector/driver reasons); network-wise, traffic goes over the public internet |
+| **IP sources** | [Fabric Service Tags](https://learn.microsoft.com/en-us/fabric/security/security-managed-vnets-fabric-service-tags) (large ranges), OPDG VM NAT IPs (static if configured) |
+| **Encryption** | TLS 1.2+ (identical to VPN path for data-in-transit protection) |
+| **Setup effort** | Minimal — add IP rules to AWS SG / bucket policy |
+
+> [!WARNING]
+> **IP whitelisting alone is not a recommended security posture for production data sources.** While it is technically functional, it provides a weaker security guarantee compared to VPN / ExpressRoute and introduces operational fragility.
+
+**Why this is not a good option:**
+
+| Concern | Detail |
+|---|---|
+| **IP ranges are broad and shared** | Fabric Service Tag IP ranges cover entire Azure regions and are shared across all Fabric tenants globally. Whitelisting them does not restrict access to *your* Fabric tenant — any Fabric user in the same region could theoretically reach your endpoint. This is **not tenant-level isolation**. |
+| **IPs change without notice** | Microsoft periodically updates Service Tag IP ranges. AWS Security Group rules must be updated in lockstep, or connectivity breaks silently. Automating this requires a polling/reconciliation process that adds operational burden. |
+| **No network-level encryption beyond TLS** | Without VPN, all traffic traverses the public internet. TLS protects data in transit, but there is no network-layer encryption (IPsec) or private routing — increasing exposure to network-level reconnaissance. |
+| **Compliance and audit gaps** | Many enterprise security frameworks (SOC 2, ISO 27001, PCI-DSS) require private network connectivity for databases holding sensitive data. IP whitelisting over the public internet may not satisfy audit requirements even with TLS. |
+| **Source IP spoofing risk** | While rare and difficult, IP-based restrictions are inherently weaker than cryptographic authentication (which VPN and mTLS provide). Defence-in-depth principles recommend not relying solely on IP for access control. |
+| **OPDG NAT IP stability** | OPDG VMs behind Azure NAT Gateway have stable outbound IPs, but any infrastructure change (VM rebuild, region failover, NAT reconfiguration) can change the source IP. Forgetting to update the AWS SG breaks connectivity. |
+
+**When it might be acceptable** (non-production or time-boxed):
+
+- **PoC / dev / test environments** where the data is non-sensitive and the priority is speed of setup.
+- **Temporary bridge** during VPN provisioning — use IP whitelisting to unblock development while the VPN tunnel is being established, then remove the public rules once the VPN is active.
+- **Read-only public datasets** where the S3 bucket or Redshift cluster intentionally serves semi-public data and the security posture permits public access with IP restriction as a supplementary control.
+
+> [!TIP]
+> If you must use IP whitelisting temporarily, treat it as **technical debt**: create a backlog item to migrate to VPN/ExpressRoute, set a review date, and add monitoring to detect access from unexpected IPs. Never combine IP whitelisting with static DB credentials that are not rotated — the blast radius of a leaked credential without VPN containment is significantly larger.
 
 ---
 
@@ -925,6 +1001,18 @@ graph TB
 - **Context**: Microsoft now supports Entra ID Service Principal authentication for S3 Shortcuts via OIDC federation with AWS IAM. This eliminates the need to manage static AWS access keys.
 - **Decision**: Use **Entra ID Service Principal** (OIDC) as the **default authentication method** for S3 Shortcuts in production. Retain IAM Access Key as a fallback for environments where OIDC federation cannot be established.
 - **Rationale**: Entra SP eliminates static credentials, provides short-lived OIDC tokens, creates a unified identity model across Azure and AWS, and enables full audit trail via AWS CloudTrail. The setup is more complex but the operational security benefits justify it for enterprise environments.
+
+### ADR-08: Do not use S3 landing zone as a substitute for direct connectivity
+
+- **Context**: Teams sometimes propose exporting data from AWS sources (Redshift, RDS, SageMaker) to an S3 bucket and consuming the staged files from Fabric via Shortcuts or Pipelines — avoiding the need for VPN or OPDG.
+- **Decision**: **Do not adopt S3 landing zone patterns** as a replacement for native Fabric connector + VPN/OPDG connectivity. Only use S3-based consumption when the data already exists in S3 as part of an established AWS data platform, or when no native Fabric connector exists for the source.
+- **Rationale**: The S3 landing zone introduces data duplication, schema drift risk, loss of query folding, operational complexity (two pipelines), and additional security surface. Native connectors to Redshift, Databricks, and other supported sources are more efficient, more secure, and require less ongoing maintenance. The one-time cost of VPN + OPDG setup is lower than the ongoing cost of managing an intermediate staging layer.
+
+### ADR-09: Do not rely on IP whitelisting as the primary network security model
+
+- **Context**: IP whitelisting (allowlisting Fabric or OPDG IPs on AWS Security Groups) is sometimes proposed as a simpler alternative to VPN or ExpressRoute for connecting to AWS data sources.
+- **Decision**: **Do not use IP whitelisting as the sole network security control** for production data sources. It is acceptable only for non-production environments or as a temporary bridge while VPN is being provisioned.
+- **Rationale**: Fabric Service Tag IP ranges are broad and shared across all tenants — whitelisting them does not provide tenant-level isolation. IP ranges change without notice, creating operational fragility. Enterprise compliance frameworks typically require private network connectivity for sensitive data. VPN/ExpressRoute provides cryptographic network-layer security (IPsec), private routing, and stable, predictable connectivity that IP whitelisting cannot match.
 
 ---
 
